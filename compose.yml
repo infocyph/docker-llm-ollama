@@ -14,8 +14,3 @@ services:
       OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
       OLLAMA_NO_CLOUD: ${OLLAMA_NO_CLOUD:-1}
-    volumes:
-      - ollama-data:/root/.ollama
-
-volumes:
-  ollama-data:
