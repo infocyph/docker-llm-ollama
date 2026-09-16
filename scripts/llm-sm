@@ -8,14 +8,12 @@ DEFAULT_MODEL_FALLBACK="${LLM_SM_MODEL:-qwen2.5:3b}"
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   BOLD=$'\033[1m'
-  DIM=$'\033[2m'
   GREEN=$'\033[32m'
   YELLOW=$'\033[33m'
   RED=$'\033[31m'
   RESET=$'\033[0m'
 else
   BOLD=''
-  DIM=''
   GREEN=''
   YELLOW=''
   RED=''
@@ -23,7 +21,6 @@ else
 fi
 
 info() { printf '%s\n' "${GREEN}$*${RESET}"; }
-warn() { printf '%s\n' "${YELLOW}$*${RESET}" >&2; }
 die() { printf '%s\n' "${RED}Error:${RESET} $*" >&2; exit 1; }
 
 require_command() {
@@ -130,12 +127,31 @@ ${BOLD}Examples:${RESET}
 EOF
 }
 
+ensure_target_dir() {
+  local target_dir="$1"
+
+  [[ -d "$target_dir" ]] && return 0
+
+  if mkdir -p -- "$target_dir" 2>/dev/null; then
+    return 0
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    sudo mkdir -p -- "$target_dir"
+    return 0
+  fi
+
+  die "Cannot create installation directory: $target_dir"
+}
+
 install_self() {
   local target_dir="${1:-/usr/local/bin}"
   local source_path target_path
 
   source_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
   target_path="${target_dir%/}/llm-sm"
+
+  ensure_target_dir "$target_dir"
 
   if [[ -w "$target_dir" ]]; then
     install -m 0755 "$source_path" "$target_path"
