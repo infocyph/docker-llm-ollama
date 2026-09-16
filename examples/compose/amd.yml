@@ -5,7 +5,7 @@ services:
       args:
         OLLAMA_BASE_IMAGE: ollama/ollama:rocm
         OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
-    image: infocyph/llm-sm:local-amd
+    image: infocyph/llm-sm-amd:local
     container_name: llm-sm
     restart: unless-stopped
     devices:
