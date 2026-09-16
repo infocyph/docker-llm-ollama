@@ -1,6 +1,7 @@
 # 🤖 Local Small LLM Docker
 
 [![Docker Publish](https://github.com/infocyph/docker-llm-sm/actions/workflows/docker.publish.yml/badge.svg)](https://github.com/infocyph/docker-llm-sm/actions/workflows/docker.publish.yml)
+[![CLI Check](https://github.com/infocyph/docker-llm-sm/actions/workflows/cli.check.yml/badge.svg)](https://github.com/infocyph/docker-llm-sm/actions/workflows/cli.check.yml)
 ![Docker Pulls](https://img.shields.io/docker/pulls/infocyph/llm-sm)
 ![Docker Image Size](https://img.shields.io/docker/image-size/infocyph/llm-sm)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -393,6 +394,17 @@ DOCKER_PASSWORD
 ```
 
 GHCR authentication uses the repository `GITHUB_TOKEN`.
+
+## Validation
+
+The `CLI Check` workflow validates the host tooling on pull requests and `main`:
+
+- `bash -n` across the entrypoint, libraries, and all command modules
+- ShellCheck across all Bash files
+- repository-layout smoke tests
+- installed-layout smoke tests
+- idempotent reinstall
+- uninstall cleanup
 
 ## License
 
