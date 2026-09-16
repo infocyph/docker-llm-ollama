@@ -94,6 +94,89 @@ Stop:
 docker compose down
 ```
 
+## Host CLI
+
+The repository includes `scripts/llm-sm`, a Bash wrapper for controlling the container and using Ollama from the host without repeatedly typing `docker exec` or raw API commands.
+
+Use it directly from the repository:
+
+```bash
+./scripts/llm-sm status
+./scripts/llm-sm models
+./scripts/llm-sm ask "Explain dependency injection briefly"
+./scripts/llm-sm chat
+```
+
+Install it globally so it can be called from any directory:
+
+```bash
+./scripts/llm-sm install
+```
+
+This installs `llm-sm` to `/usr/local/bin` by default. A custom installation directory can be supplied:
+
+```bash
+./scripts/llm-sm install "$HOME/.local/bin"
+```
+
+Remove the global command:
+
+```bash
+llm-sm uninstall
+```
+
+### CLI commands
+
+| Command | Purpose |
+|---|---|
+| `llm-sm status` | Container state, health, API endpoint and default model |
+| `llm-sm start` | Start the existing container |
+| `llm-sm stop` | Stop the container |
+| `llm-sm restart` | Restart the container |
+| `llm-sm logs` | Follow container logs |
+| `llm-sm models` | List installed Ollama models |
+| `llm-sm ps` | List currently loaded models |
+| `llm-sm chat [model]` | Start an interactive model session |
+| `llm-sm ask <prompt>` | One-shot request using the default model |
+| `llm-sm ask -m <model> <prompt>` | One-shot request using a selected model |
+| `llm-sm run <model> [prompt]` | Run an explicit model |
+| `llm-sm show [model]` | Show model information |
+| `llm-sm pull <model>` | Pull another model into the current container |
+| `llm-sm rm <model>` | Remove a model from the current container |
+| `llm-sm unload [model]` | Unload a model from RAM/VRAM |
+| `llm-sm ollama <args...>` | Raw Ollama CLI passthrough |
+| `llm-sm api <path> [curl args...]` | Raw HTTP API access |
+| `llm-sm version` | Wrapper and Ollama versions |
+
+Prompts can also be piped through stdin:
+
+```bash
+echo "Summarize this sentence" | llm-sm ask
+```
+
+Raw Ollama commands remain available:
+
+```bash
+llm-sm ollama list
+llm-sm ollama show qwen2.5:3b
+```
+
+And the HTTP API can be called without repeating the base URL:
+
+```bash
+llm-sm api /api/tags
+```
+
+The wrapper defaults to container `llm-sm` and API `http://127.0.0.1:11434`. These can be overridden without editing the script:
+
+```bash
+LLM_SM_CONTAINER=my-llm llm-sm status
+LLM_SM_URL=http://127.0.0.1:12434 llm-sm api /api/tags
+LLM_SM_MODEL=qwen2.5:1.5b llm-sm ask "Hello"
+```
+
+`llm-sm pull` changes the writable layer of the current container. An additionally pulled model survives container stop/start but is lost when that container is removed or recreated. The model baked into the image remains the reproducible deployment model.
+
 ## Native Ollama API
 
 List models:
