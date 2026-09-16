@@ -2,7 +2,11 @@
 
 command_main() {
   local model schema_file response_only prompt format_json response
-  model="${LLM_SM_MODEL:-$DEFAULT_MODEL_FALLBACK}"
+  model="$DEFAULT_MODEL_FALLBACK"
+  if command -v docker >/dev/null 2>&1 && container_exists; then
+    model="$(container_model)"
+  fi
+
   schema_file=""
   response_only=0
 
