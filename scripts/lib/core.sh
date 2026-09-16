@@ -37,6 +37,28 @@ read_input() {
   fi
 }
 
+read_stdin_if_piped() {
+  if [[ ! -t 0 ]]; then
+    cat
+  fi
+}
+
+file_context() {
+  local file first=1
+
+  for file in "$@"; do
+    [[ -f "$file" ]] || die "File not found: $file"
+
+    if (( ! first )); then
+      printf '\n\n'
+    fi
+    first=0
+
+    printf '%s\n' "--- FILE: $file ---"
+    cat -- "$file"
+  done
+}
+
 json_quote() {
   local value="$1"
   value=${value//\\/\\\\}
