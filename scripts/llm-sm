@@ -8,7 +8,7 @@ if [[ -f "$SCRIPT_DIR/lib/core.sh" && -d "$SCRIPT_DIR/commands" ]]; then
   RUNTIME_ROOT="$SCRIPT_DIR"
 else
   PREFIX="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-  RUNTIME_ROOT="${LLM_SM_LIB_DIR:-$PREFIX/lib/llm-sm}"
+  RUNTIME_ROOT="$PREFIX/lib/llm-sm"
 fi
 
 for required in \

@@ -7,14 +7,18 @@ print_ai_commit_help() {
   cat <<'EOF'
 Usage: llm-sm ai-commit [options]
 
-Generate a commit message from staged changes using llm-sm's bundled
-Conventional Commit + Gitmoji prompt and local Ollama inference.
+Generate a commit message using llm-sm's bundled Conventional Commit + Gitmoji
+prompt and local Ollama inference.
+
+By default, staged changes are read from the current Git repository. When the
+CLI runs inside the published container, use --diff-stdin to pipe a host diff.
 
 Options:
   -m, --model <model>   Override the Ollama model
   -y, --yes             Commit immediately with the generated message
   -e, --edit            Open the generated message in $EDITOR, then commit
   -p, --print           Print only the generated message; do not commit
+      --diff-stdin      Read the diff from stdin and print the generated message
   -h, --help            Show this help
 
 Environment:
@@ -46,6 +50,7 @@ commit_with_message_file() {
 command_main() {
   local model="${LLM_SM_MODEL:-}"
   local action="interactive"
+  local diff_stdin=0
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -66,6 +71,11 @@ command_main() {
         action="print"
         shift
         ;;
+      --diff-stdin)
+        diff_stdin=1
+        action="print"
+        shift
+        ;;
       -h|--help)
         print_ai_commit_help
         return 0
@@ -76,16 +86,8 @@ command_main() {
     esac
   done
 
-  require_command git
   require_command jq
   require_command curl
-
-  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
-    die "Not inside a Git repository"
-
-  if git diff --cached --quiet; then
-    die "No staged changes found. Stage changes first with 'git add <files>'."
-  fi
 
   [[ -n "$model" ]] || model="$(container_model)"
 
@@ -98,10 +100,21 @@ command_main() {
   local payload_file="$AI_COMMIT_TMP/request.json"
   local response_file="$AI_COMMIT_TMP/response.json"
 
-  git diff --cached > "$diff_file"
-  [[ -s "$diff_file" ]] || die "Failed to read staged diff"
+  if (( diff_stdin )); then
+    [[ ! -t 0 ]] || die "--diff-stdin requires a diff on stdin"
+    cat > "$diff_file"
+  else
+    require_command git
+    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Not inside a Git repository"
+    if git diff --cached --quiet; then
+      die "No staged changes found. Stage changes first with 'git add <files>'."
+    fi
+    git diff --cached > "$diff_file"
+  fi
 
-  info "Analyzing staged changes with $model..."
+  [[ -s "$diff_file" ]] || die "No diff content found"
+
+  warn "Analyzing changes with $model..."
   load_ai_commit_prompt > "$prompt_file"
   [[ -s "$prompt_file" ]] || die "Failed to load ai-commit prompt"
 

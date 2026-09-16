@@ -13,12 +13,27 @@ ENV OLLAMA_HOST=0.0.0.0:11434 \
     OLLAMA_MAX_LOADED_MODELS=1 \
     OLLAMA_KEEP_ALIVE=5m \
     OLLAMA_NO_CLOUD=1 \
-    OLLAMA_MODEL=${OLLAMA_MODEL}
+    OLLAMA_MODEL=${OLLAMA_MODEL} \
+    LLM_SM_IN_CONTAINER=1 \
+    LLM_SM_URL=http://127.0.0.1:11434
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl git jq \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY scripts/llm-sm /usr/local/bin/llm-sm
+COPY scripts/lib /usr/local/lib/llm-sm/lib
+COPY scripts/commands /usr/local/lib/llm-sm/commands
+COPY scripts/prompts /usr/local/lib/llm-sm/prompts
+
+RUN chmod 0755 /usr/local/bin/llm-sm \
+    && chmod -R a+rX /usr/local/lib/llm-sm
 
 # Bake the default model into the image so the container is immediately usable
 # without downloading model weights on first startup.
 RUN set -eu; \
     export OLLAMA_HOST=127.0.0.1:11434; \
+    export OLLAMA_NO_CLOUD=0; \
     /bin/ollama serve >/tmp/ollama-build.log 2>&1 & \
     pid=$!; \
     cleanup() { \

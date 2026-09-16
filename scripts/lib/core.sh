@@ -2,7 +2,7 @@
 
 # Shared by dynamically loaded command modules.
 # shellcheck disable=SC2034
-VERSION="0.3.0"
+VERSION="0.4.0"
 CONTAINER="${LLM_SM_CONTAINER:-llm-sm}"
 API_URL="${LLM_SM_URL:-http://127.0.0.1:${OLLAMA_PORT:-11434}}"
 DEFAULT_MODEL_FALLBACK="${LLM_SM_MODEL:-qwen2.5:3b}"
