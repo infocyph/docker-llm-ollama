@@ -18,11 +18,10 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
-      - name: Check Bash syntax
-        run: bash -n scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh
-
-      - name: Run ShellCheck
-        run: shellcheck -x scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh
+      - name: Validate CLI
+        run: |
+          bash -n scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh
+          shellcheck -x scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh
 
       - name: Smoke test repository CLI
         run: |
