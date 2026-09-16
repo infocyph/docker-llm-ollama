@@ -38,9 +38,11 @@ jobs:
         run: |
           if [ "$EVENT_NAME" = "release" ]; then
             RELEASE_TAG="$EVENT_RELEASE_TAG"
+            PUBLISH_RELEASE_TAG=true
           else
             echo "Fetching latest release tag..."
             RELEASE_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
+            PUBLISH_RELEASE_TAG=false
           fi
 
           if [ -z "$RELEASE_TAG" ]; then
@@ -49,7 +51,9 @@ jobs:
           fi
 
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "PUBLISH_RELEASE_TAG=$PUBLISH_RELEASE_TAG" >> "$GITHUB_ENV"
           echo "Using release tag: $RELEASE_TAG"
+          echo "Publish immutable release tag: $PUBLISH_RELEASE_TAG"
 
       - name: Resolve image name
         env:
@@ -87,7 +91,7 @@ jobs:
             docker.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
             ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=${{ env.RELEASE_TAG }}
+            type=raw,value=${{ env.RELEASE_TAG }},enable=${{ env.PUBLISH_RELEASE_TAG }}
             type=raw,value=latest
 
       - name: Set up Docker Buildx
