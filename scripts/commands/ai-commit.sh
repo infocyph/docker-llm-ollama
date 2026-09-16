@@ -7,24 +7,19 @@ print_ai_commit_help() {
   cat <<'EOF'
 Usage: llm-sm ai-commit [options]
 
-Generate a commit message from staged changes using the same prompt as
-infocyph/Toolset's `gitx ai-commit`, but run inference through local Ollama.
+Generate a commit message from staged changes using llm-sm's bundled
+Conventional Commit + Gitmoji prompt and local Ollama inference.
 
 Options:
   -m, --model <model>   Override the Ollama model
   -y, --yes             Commit immediately with the generated message
   -e, --edit            Open the generated message in $EDITOR, then commit
   -p, --print           Print only the generated message; do not commit
-      --refresh-prompt  Refresh the cached canonical Toolset prompt
   -h, --help            Show this help
 
-Prompt precedence:
-  1. LLM_SM_AI_COMMIT_PROMPT_B64
-  2. GITX_SYS_INSTRUCTION_B64
-  3. ~/.config/gitx/instructions.b64
-  4. Prompt embedded in the installed `gitx`
-  5. Cached Toolset prompt
-  6. infocyph/Toolset main branch (then cached)
+Environment:
+  LLM_SM_AI_COMMIT_PROMPT_FILE
+                        Override the bundled prompt with another local file
 EOF
 }
 
@@ -51,7 +46,6 @@ commit_with_message_file() {
 command_main() {
   local model="${LLM_SM_MODEL:-}"
   local action="interactive"
-  local refresh_prompt=0
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -72,10 +66,6 @@ command_main() {
         action="print"
         shift
         ;;
-      --refresh-prompt)
-        refresh_prompt=1
-        shift
-        ;;
       -h|--help)
         print_ai_commit_help
         return 0
@@ -89,7 +79,6 @@ command_main() {
   require_command git
   require_command jq
   require_command curl
-  require_command base64
 
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || \
     die "Not inside a Git repository"
@@ -113,7 +102,7 @@ command_main() {
   [[ -s "$diff_file" ]] || die "Failed to read staged diff"
 
   info "Analyzing staged changes with $model..."
-  load_ai_commit_prompt "$refresh_prompt" > "$prompt_file"
+  load_ai_commit_prompt > "$prompt_file"
   [[ -s "$prompt_file" ]] || die "Failed to load ai-commit prompt"
 
   jq -n \
