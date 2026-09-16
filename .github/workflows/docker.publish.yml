@@ -1,0 +1,122 @@
+name: Docker Publish
+
+on:
+  release:
+    types: [published]
+  schedule:
+    - cron: '0 0 * * 0'
+
+jobs:
+  push_to_registries:
+    name: Publish ${{ matrix.variant }} image
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: standard
+            tag_prefix: ''
+            ollama_base_image: ollama/ollama:latest
+          - variant: amd
+            tag_prefix: 'amd-'
+            ollama_base_image: ollama/ollama:rocm
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      artifact-metadata: write
+      id-token: write
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Resolve release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ "$EVENT_NAME" = "release" ]; then
+            RELEASE_TAG="$EVENT_RELEASE_TAG"
+            PUBLISH_RELEASE_TAG=true
+          else
+            echo "Scheduled build: resolving the latest published release for source checkout."
+            RELEASE_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
+            PUBLISH_RELEASE_TAG=false
+          fi
+
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "No release found. Exiting."
+            exit 1
+          fi
+
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "PUBLISH_RELEASE_TAG=$PUBLISH_RELEASE_TAG" >> "$GITHUB_ENV"
+          echo "Source release: $RELEASE_TAG"
+          echo "Publish immutable release tag: $PUBLISH_RELEASE_TAG"
+
+      - name: Resolve image name
+        run: |
+          IMAGE_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2 | sed 's/^docker-//')
+          echo "IMAGE_NAME=$IMAGE_NAME" >> "$GITHUB_ENV"
+          echo "Publishing image repository: $IMAGE_NAME"
+
+      - name: Check out the release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: |
+            docker.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ matrix.tag_prefix }}${{ env.RELEASE_TAG }},enable=${{ env.PUBLISH_RELEASE_TAG }}
+            type=raw,value=${{ matrix.tag_prefix }}latest
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push Docker images
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          build-args: |
+            OLLAMA_BASE_IMAGE=${{ matrix.ollama_base_image }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
+
+      - name: Generate artifact attestation for Docker Hub
+        uses: actions/attest@v4
+        with:
+          subject-name: docker.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Generate artifact attestation for GHCR
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
