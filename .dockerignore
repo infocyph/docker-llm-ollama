@@ -12,8 +12,8 @@ LICENSE
 .vscode
 .codex
 
-scripts/
 compose.yml
+examples/
 
 *.log
 *.tar

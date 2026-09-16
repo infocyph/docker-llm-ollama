@@ -22,6 +22,8 @@ jobs:
         run: |
           bash -n scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh
           shellcheck -x scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh
+          test ! -e scripts/commands/install.sh
+          test ! -e scripts/commands/uninstall.sh
 
       - name: Validate Compose examples
         run: |
@@ -34,18 +36,18 @@ jobs:
         run: |
           ./scripts/llm-sm help >/dev/null
           ./scripts/llm-sm ai-commit --help >/dev/null
-          ./scripts/llm-sm version | grep -q '^llm-sm 0.3.0$'
+          ./scripts/llm-sm version | grep -q '^llm-sm 0.4.0$'
           test -s scripts/prompts/ai-commit.txt
 
-      - name: Smoke test installed CLI
+      - name: Smoke test bundled image layout
         run: |
-          tmp="$(mktemp -d)"
-          ./scripts/llm-sm install "$tmp/bin"
-          "$tmp/bin/llm-sm" help >/dev/null
-          "$tmp/bin/llm-sm" ai-commit --help >/dev/null
-          "$tmp/bin/llm-sm" version | grep -q '^llm-sm 0.3.0$'
-          test -s "$tmp/lib/llm-sm/prompts/ai-commit.txt"
-          "$tmp/bin/llm-sm" install "$tmp/bin"
-          "$tmp/bin/llm-sm" uninstall "$tmp/bin"
-          test ! -e "$tmp/bin/llm-sm"
-          test ! -d "$tmp/lib/llm-sm"
+          root="$(mktemp -d)"
+          mkdir -p "$root/usr/local/bin" "$root/usr/local/lib/llm-sm"
+          cp scripts/llm-sm "$root/usr/local/bin/llm-sm"
+          cp -R scripts/lib scripts/commands scripts/prompts "$root/usr/local/lib/llm-sm/"
+          chmod 0755 "$root/usr/local/bin/llm-sm"
+
+          "$root/usr/local/bin/llm-sm" help >/dev/null
+          "$root/usr/local/bin/llm-sm" ai-commit --help >/dev/null
+          "$root/usr/local/bin/llm-sm" version | grep -q '^llm-sm 0.4.0$'
+          test -s "$root/usr/local/lib/llm-sm/prompts/ai-commit.txt"

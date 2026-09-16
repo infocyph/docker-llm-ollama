@@ -2,7 +2,7 @@
 
 command_main() {
   cat <<EOF
-${BOLD}llm-sm${RESET} - host CLI for the local Ollama small-model container
+${BOLD}llm-sm${RESET} - bundled CLI for the local Ollama small-model runtime
 
 ${BOLD}Usage:${RESET}
   llm-sm <command> [arguments]
@@ -14,7 +14,7 @@ ${BOLD}Developer:${RESET}
   code [options] <task>                 Generate or improve code
   review [options] [file...] [focus]    Review code from files/stdin
   json [options] <prompt>               Native structured JSON output
-  ai-commit [options]                   Generate commit message from staged diff
+  ai-commit [options]                   Generate commit message from a Git diff
 
 ${BOLD}Model:${RESET}
   models                                List installed models
@@ -24,6 +24,10 @@ ${BOLD}Model:${RESET}
   pull <model>                          Pull a model
   rm <model>                            Remove a model
   unload [model]                        Unload a model from RAM/VRAM
+EOF
+
+  if ! in_container; then
+    cat <<EOF
 
 ${BOLD}Container:${RESET}
   status                                Show container/API/model status
@@ -31,15 +35,15 @@ ${BOLD}Container:${RESET}
   stop                                  Stop container
   restart                               Restart container
   logs [docker-log-args...]             Follow/read container logs
+EOF
+  fi
+
+  cat <<EOF
 
 ${BOLD}Low level:${RESET}
   ollama <args...>                      Raw Ollama CLI passthrough
   api <path> [curl-args...]             Raw Ollama HTTP API call
   version                               Show CLI/Ollama versions
-
-${BOLD}Host install:${RESET}
-  install [bin-directory]               Install command + modules
-  uninstall [bin-directory]             Remove installed command + modules
 
 ${BOLD}Common options:${RESET}
   -m, --model <model>                   Override model
@@ -56,13 +60,12 @@ ${BOLD}ai-commit options:${RESET}
   -y, --yes                             Commit generated message immediately
   -e, --edit                            Edit generated message before commit
   -p, --print                           Print generated message only
+  --diff-stdin                          Read Git diff from stdin and print message
 
 ${BOLD}Environment:${RESET}
-  LLM_SM_CONTAINER                      Container name (default: llm-sm)
   LLM_SM_URL                            API base URL (default: http://127.0.0.1:11434)
   LLM_SM_MODEL                          Default/fallback model (default: qwen2.5:3b)
   LLM_SM_SYSTEM                         Default system text for prompt
-  LLM_SM_LIB_DIR                        Override installed module directory
   LLM_SM_AI_COMMIT_PROMPT_FILE          Override bundled ai-commit prompt file
   OLLAMA_PORT                           Port when LLM_SM_URL is unset
   NO_COLOR                              Disable colored output
@@ -77,6 +80,6 @@ ${BOLD}Examples:${RESET}
   llm-sm json -r "Return an object with name and version"
   llm-sm json --schema schema.json -r "Describe this service"
   git add . && llm-sm ai-commit
-  llm-sm ai-commit --print
+  git diff --cached | llm-sm ai-commit --diff-stdin
 EOF
 }

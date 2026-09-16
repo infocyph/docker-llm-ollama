@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 
 exec_ollama() {
+  if in_container; then
+    OLLAMA_HOST=127.0.0.1:11434 /bin/ollama "$@"
+    return $?
+  fi
+
   require_command docker
   require_running
 
