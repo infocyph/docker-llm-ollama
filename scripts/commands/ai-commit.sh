@@ -10,8 +10,9 @@ Usage: llm-sm ai-commit [options]
 Generate a commit message using llm-sm's bundled Conventional Commit + Gitmoji
 prompt and local Ollama inference.
 
-By default, staged changes are read from the current Git repository. When the
-CLI runs inside the published container, use --diff-stdin to pipe a host diff.
+By default, staged changes are read from the current Git repository. This works
+inside the published container when the repository is bind-mounted there.
+Use --diff-stdin as a fallback when no repository mount is available.
 
 Options:
   -m, --model <model>   Override the Ollama model
@@ -25,6 +26,10 @@ Environment:
   LLM_SM_AI_COMMIT_PROMPT_FILE
                         Override the bundled prompt with another local file
 EOF
+}
+
+git_cmd() {
+  git -c safe.directory='*' "$@"
 }
 
 commit_with_message_file() {
@@ -43,7 +48,7 @@ commit_with_message_file() {
   fi
 
   [[ -s "$msg_file" ]] || die "Commit message is empty"
-  git commit -F "$msg_file"
+  git_cmd commit -F "$msg_file"
   info "Committed successfully."
 }
 
@@ -105,11 +110,11 @@ command_main() {
     cat > "$diff_file"
   else
     require_command git
-    git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Not inside a Git repository"
-    if git diff --cached --quiet; then
+    git_cmd rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "Not inside a Git repository"
+    if git_cmd diff --cached --quiet; then
       die "No staged changes found. Stage changes first with 'git add <files>'."
     fi
-    git diff --cached > "$diff_file"
+    git_cmd diff --cached > "$diff_file"
   fi
 
   [[ -s "$diff_file" ]] || die "No diff content found"
