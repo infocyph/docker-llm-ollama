@@ -56,7 +56,6 @@ ${BOLD}ai-commit options:${RESET}
   -y, --yes                             Commit generated message immediately
   -e, --edit                            Edit generated message before commit
   -p, --print                           Print generated message only
-  --refresh-prompt                      Refresh cached prompt from infocyph/Toolset
 
 ${BOLD}Environment:${RESET}
   LLM_SM_CONTAINER                      Container name (default: llm-sm)
@@ -64,8 +63,7 @@ ${BOLD}Environment:${RESET}
   LLM_SM_MODEL                          Default/fallback model (default: qwen2.5:3b)
   LLM_SM_SYSTEM                         Default system text for prompt
   LLM_SM_LIB_DIR                        Override installed module directory
-  LLM_SM_AI_COMMIT_PROMPT_B64           Override ai-commit system prompt
-  GITX_SYS_INSTRUCTION_B64              Reuse gitx prompt override
+  LLM_SM_AI_COMMIT_PROMPT_FILE          Override bundled ai-commit prompt file
   OLLAMA_PORT                           Port when LLM_SM_URL is unset
   NO_COLOR                              Disable colored output
 
