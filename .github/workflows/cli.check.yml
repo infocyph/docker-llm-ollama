@@ -23,6 +23,13 @@ jobs:
           bash -n scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh
           shellcheck -x scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh
 
+      - name: Validate Compose examples
+        run: |
+          docker compose -f compose.yml config >/dev/null
+          docker compose -f examples/compose/cpu.yml config >/dev/null
+          docker compose -f examples/compose/nvidia.yml config >/dev/null
+          docker compose -f examples/compose/amd.yml config >/dev/null
+
       - name: Smoke test repository CLI
         run: |
           ./scripts/llm-sm help >/dev/null
