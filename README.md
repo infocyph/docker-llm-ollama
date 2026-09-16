@@ -13,10 +13,14 @@ The default image bakes `qwen2.5:3b` into the container during build, so it can 
 
 ## Registries
 
-| Registry | Image |
-|---|---|
-| Docker Hub | `docker.io/infocyph/llm-sm` |
-| GitHub Container Registry | `ghcr.io/infocyph/llm-sm` |
+Every release publishes two image families. The standard image supports CPU and NVIDIA deployments; the AMD image uses Ollama's ROCm runtime.
+
+| Variant | Docker Hub | GitHub Container Registry |
+|---|---|---|
+| CPU / NVIDIA | `docker.io/infocyph/llm-sm` | `ghcr.io/infocyph/llm-sm` |
+| AMD ROCm | `docker.io/infocyph/llm-sm-amd` | `ghcr.io/infocyph/llm-sm-amd` |
+
+For a release such as `v1.0.0`, the workflow publishes both `v1.0.0` and `latest` tags for each image family.
 
 ## Defaults
 
@@ -53,7 +57,7 @@ AMD ROCm build:
 ```bash
 docker build \
   --build-arg OLLAMA_BASE_IMAGE=ollama/ollama:rocm \
-  -t infocyph/llm-sm:local-amd .
+  -t infocyph/llm-sm-amd:local .
 ```
 
 The selected model is downloaded at build time and becomes part of the image. `OLLAMA_BASE_IMAGE` defaults to `ollama/ollama:latest`; AMD ROCm builds override it with `ollama/ollama:rocm`.
@@ -90,7 +94,7 @@ Build the ROCm variant first:
 ```bash
 docker build \
   --build-arg OLLAMA_BASE_IMAGE=ollama/ollama:rocm \
-  -t infocyph/llm-sm:local-amd .
+  -t infocyph/llm-sm-amd:local .
 ```
 
 Then pass the AMD KFD and DRI devices through to the container:
@@ -101,7 +105,7 @@ docker run --rm \
   --device=/dev/kfd \
   --device=/dev/dri \
   -p 127.0.0.1:11434:11434 \
-  infocyph/llm-sm:local-amd
+  infocyph/llm-sm-amd:local
 ```
 
 AMD GPU support here targets Linux hosts supported by Ollama/ROCm. If device permissions prevent GPU discovery, check the host permissions/group IDs for `/dev/kfd` and `/dev/dri` and add the required groups to the container.
@@ -136,7 +140,7 @@ services:
       args:
         OLLAMA_BASE_IMAGE: ollama/ollama:latest
         OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
-    image: infocyph/llm-sm:local-cpu
+    image: infocyph/llm-sm:local
     container_name: llm-sm
     restart: unless-stopped
     ports:
@@ -166,7 +170,7 @@ services:
       args:
         OLLAMA_BASE_IMAGE: ollama/ollama:latest
         OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
-    image: infocyph/llm-sm:local-nvidia
+    image: infocyph/llm-sm:local
     container_name: llm-sm
     restart: unless-stopped
     gpus: all
@@ -209,7 +213,7 @@ services:
       args:
         OLLAMA_BASE_IMAGE: ollama/ollama:rocm
         OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
-    image: infocyph/llm-sm:local-amd
+    image: infocyph/llm-sm-amd:local
     container_name: llm-sm
     restart: unless-stopped
     devices:
@@ -588,13 +592,14 @@ The trade-off is a larger Docker image. For frequently changing or multiple mode
 
 ## Publishing
 
-The GitHub Actions workflow follows the same release-driven pattern used by `infocyph/docker-tools`:
+Each GitHub Release publishes both runtime variants in parallel:
 
-- publish on GitHub Release
-- weekly rebuild against the current upstream Ollama image
-- push to Docker Hub and GHCR
-- publish `latest` and the release tag
-- generate build provenance attestations
+- `infocyph/llm-sm:<release>` and `infocyph/llm-sm:latest` from `ollama/ollama:latest` for CPU/NVIDIA
+- `infocyph/llm-sm-amd:<release>` and `infocyph/llm-sm-amd:latest` from `ollama/ollama:rocm` for AMD ROCm
+- both image families are pushed to Docker Hub and GHCR
+- each variant has its own Buildx cache scope
+- each registry/image pair receives build provenance attestation
+- the weekly rebuild republishes both image families from the latest GitHub release tag against current upstream Ollama bases
 
 Required repository secrets:
 
