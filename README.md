@@ -217,9 +217,9 @@ Use Ollama's native JSON mode:
 llm-sm json "Return an object with name and version"
 ```
 
-The default output is the complete Ollama API response envelope.
+The default output is the complete Ollama API response envelope and only requires `curl`.
 
-To print only the model-produced JSON value, use `-r`/`--response-only` (`jq` is required on the host):
+To print only the model-produced JSON value, use `-r`/`--response-only`; that convenience mode requires `jq` on the host:
 
 ```bash
 llm-sm json -r "Return an object with name and version"
