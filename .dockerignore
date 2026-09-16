@@ -12,6 +12,9 @@ LICENSE
 .vscode
 .codex
 
+scripts/
+compose.yml
+
 *.log
 *.tar
 *.zip
