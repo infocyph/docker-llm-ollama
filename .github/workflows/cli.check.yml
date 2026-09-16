@@ -26,14 +26,17 @@ jobs:
       - name: Smoke test repository CLI
         run: |
           ./scripts/llm-sm help >/dev/null
-          ./scripts/llm-sm version | grep -q '^llm-sm 0.2.0$'
+          ./scripts/llm-sm ai-commit --help >/dev/null
+          ./scripts/llm-sm version | grep -q '^llm-sm 0.3.0$'
 
       - name: Smoke test installed CLI
         run: |
           tmp="$(mktemp -d)"
           ./scripts/llm-sm install "$tmp/bin"
           "$tmp/bin/llm-sm" help >/dev/null
-          "$tmp/bin/llm-sm" version | grep -q '^llm-sm 0.2.0$'
+          "$tmp/bin/llm-sm" ai-commit --help >/dev/null
+          "$tmp/bin/llm-sm" version | grep -q '^llm-sm 0.3.0$'
+          test -f "$tmp/lib/llm-sm/prompts/ai-commit.source"
           "$tmp/bin/llm-sm" install "$tmp/bin"
           "$tmp/bin/llm-sm" uninstall "$tmp/bin"
           test ! -e "$tmp/bin/llm-sm"
