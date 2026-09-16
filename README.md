@@ -96,49 +96,160 @@ docker compose down
 
 ## Host CLI
 
-The repository includes `scripts/llm-sm`, a Bash wrapper for controlling the container and using Ollama from the host without repeatedly typing `docker exec` or raw API commands.
+The repository includes a modular Bash CLI for controlling the container and using the local model without repeatedly typing `docker exec` or raw API requests.
 
 Use it directly from the repository:
 
 ```bash
 ./scripts/llm-sm status
-./scripts/llm-sm models
 ./scripts/llm-sm ask "Explain dependency injection briefly"
-./scripts/llm-sm chat
+./scripts/llm-sm code "Write a PHP readonly DTO"
 ```
 
-Install it globally so it can be called from any directory:
+Install it so it can be called from any directory:
 
 ```bash
 ./scripts/llm-sm install
 ```
 
-This installs `llm-sm` to `/usr/local/bin` by default. A custom installation directory can be supplied:
+The default layout is:
+
+```text
+/usr/local/bin/llm-sm
+/usr/local/lib/llm-sm/lib/
+/usr/local/lib/llm-sm/commands/
+```
+
+A user-local installation keeps the same prefix layout:
 
 ```bash
 ./scripts/llm-sm install "$HOME/.local/bin"
 ```
 
-Remove the global command:
+which installs modules under `$HOME/.local/lib/llm-sm`.
+
+Remove it with:
 
 ```bash
 llm-sm uninstall
+```
+
+### Modular command layout
+
+The entrypoint is intentionally small. Each command is implemented independently:
+
+```text
+scripts/
+├── llm-sm
+├── lib/
+│   ├── core.sh
+│   ├── docker.sh
+│   └── ollama.sh
+└── commands/
+    ├── ask.sh
+    ├── chat.sh
+    ├── prompt.sh
+    ├── code.sh
+    ├── review.sh
+    ├── json.sh
+    └── ...
+```
+
+This keeps command behavior isolated while shared Docker/Ollama/input helpers stay reusable.
+
+### Developer commands
+
+One-shot request:
+
+```bash
+llm-sm ask "Explain PHP fibers briefly"
+llm-sm ask -m qwen2.5:3b "Explain event sourcing"
+```
+
+Interactive chat:
+
+```bash
+llm-sm chat
+llm-sm chat qwen2.5:3b
+```
+
+Generic prompt with a system-style instruction and file context:
+
+```bash
+llm-sm prompt \
+  --system "Answer concisely and call out assumptions" \
+  --file composer.json \
+  "Explain this package architecture"
+```
+
+Generate or improve code:
+
+```bash
+llm-sm code "Write a lightweight PHP rate limiter"
+
+llm-sm code \
+  --file src/HotPath.php \
+  "Optimize this hot path without changing behavior"
+```
+
+Piped code is accepted as context:
+
+```bash
+cat src/HotPath.php | llm-sm code "Optimize this implementation"
+```
+
+Review code:
+
+```bash
+llm-sm review src/Service.php
+llm-sm review src/Service.php "Focus on concurrency and resource leaks"
+cat src/Service.php | llm-sm review
+```
+
+`review` prioritizes correctness, security, performance, concurrency, resource handling, edge cases, compatibility risks, and production failure modes rather than style-only noise.
+
+### Structured JSON
+
+Use Ollama's native JSON mode:
+
+```bash
+llm-sm json "Return an object with name and version"
+```
+
+The default output is the complete Ollama API response envelope.
+
+To print only the model-produced JSON value, use `-r`/`--response-only` (`jq` is required on the host):
+
+```bash
+llm-sm json -r "Return an object with name and version"
+```
+
+A JSON Schema file can be supplied directly as Ollama's `format` value:
+
+```bash
+llm-sm json \
+  --schema schema.json \
+  --response-only \
+  "Describe this service"
 ```
 
 ### CLI commands
 
 | Command | Purpose |
 |---|---|
-| `llm-sm status` | Container state, health, API endpoint and default model |
+| `llm-sm ask [-m model] <prompt>` | One-shot request |
+| `llm-sm chat [model]` | Interactive model session |
+| `llm-sm prompt [options] <prompt>` | Generic prompt with system/file/stdin context |
+| `llm-sm code [options] <task>` | Generate or improve code |
+| `llm-sm review [options] [file...] [focus]` | Review files or piped code |
+| `llm-sm json [options] <prompt>` | Native structured JSON output |
+| `llm-sm status` | Container state, health, API endpoint and model |
 | `llm-sm start` | Start the existing container |
 | `llm-sm stop` | Stop the container |
 | `llm-sm restart` | Restart the container |
 | `llm-sm logs` | Follow container logs |
 | `llm-sm models` | List installed Ollama models |
 | `llm-sm ps` | List currently loaded models |
-| `llm-sm chat [model]` | Start an interactive model session |
-| `llm-sm ask <prompt>` | One-shot request using the default model |
-| `llm-sm ask -m <model> <prompt>` | One-shot request using a selected model |
 | `llm-sm run <model> [prompt]` | Run an explicit model |
 | `llm-sm show [model]` | Show model information |
 | `llm-sm pull <model>` | Pull another model into the current container |
@@ -146,9 +257,11 @@ llm-sm uninstall
 | `llm-sm unload [model]` | Unload a model from RAM/VRAM |
 | `llm-sm ollama <args...>` | Raw Ollama CLI passthrough |
 | `llm-sm api <path> [curl args...]` | Raw HTTP API access |
-| `llm-sm version` | Wrapper and Ollama versions |
+| `llm-sm version` | CLI and Ollama versions |
+| `llm-sm install [bin-directory]` | Install executable and modules |
+| `llm-sm uninstall [bin-directory]` | Remove executable and modules |
 
-Prompts can also be piped through stdin:
+Prompts can be piped through stdin:
 
 ```bash
 echo "Summarize this sentence" | llm-sm ask
@@ -167,12 +280,13 @@ And the HTTP API can be called without repeating the base URL:
 llm-sm api /api/tags
 ```
 
-The wrapper defaults to container `llm-sm` and API `http://127.0.0.1:11434`. These can be overridden without editing the script:
+The CLI defaults to container `llm-sm` and API `http://127.0.0.1:11434`. These can be overridden without editing scripts:
 
 ```bash
 LLM_SM_CONTAINER=my-llm llm-sm status
 LLM_SM_URL=http://127.0.0.1:12434 llm-sm api /api/tags
 LLM_SM_MODEL=qwen2.5:1.5b llm-sm ask "Hello"
+LLM_SM_SYSTEM="Be concise" llm-sm prompt "Explain CQRS"
 ```
 
 `llm-sm pull` changes the writable layer of the current container. An additionally pulled model survives container stop/start but is lost when that container is removed or recreated. The model baked into the image remains the reproducible deployment model.
