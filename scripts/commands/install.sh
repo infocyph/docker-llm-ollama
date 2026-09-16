@@ -21,14 +21,18 @@ command_main() {
   fi
 
   if (( use_sudo )); then
-    sudo install -m 0755 "$LLM_SM_ENTRYPOINT" "$target_bin"
+    if [[ "$LLM_SM_ENTRYPOINT" != "$target_bin" ]]; then
+      sudo install -m 0755 "$LLM_SM_ENTRYPOINT" "$target_bin"
+    fi
     if [[ "$source_root" != "$lib_target" ]]; then
       sudo rm -rf -- "$lib_target/lib" "$lib_target/commands"
       sudo cp -R -- "$source_root/lib" "$source_root/commands" "$lib_target/"
       sudo chmod -R a+rX "$lib_target"
     fi
   else
-    install -m 0755 "$LLM_SM_ENTRYPOINT" "$target_bin"
+    if [[ "$LLM_SM_ENTRYPOINT" != "$target_bin" ]]; then
+      install -m 0755 "$LLM_SM_ENTRYPOINT" "$target_bin"
+    fi
     if [[ "$source_root" != "$lib_target" ]]; then
       rm -rf -- "$lib_target/lib" "$lib_target/commands"
       cp -R -- "$source_root/lib" "$source_root/commands" "$lib_target/"
