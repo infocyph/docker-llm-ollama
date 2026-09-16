@@ -1,3 +1,0 @@
-# Canonical ai-commit prompt source.
-# llm-sm extracts the hardcoded GITX_SYS_INSTRUCTION_B64 fallback from this file.
-https://raw.githubusercontent.com/infocyph/Toolset/main/Git/gitx
