@@ -1,7 +1,6 @@
 .idea
-.vscode
+*~
+*.txt
 .codex
 .env
-.env.*
-*.log
-*~
+.tmp
