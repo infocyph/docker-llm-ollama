@@ -14,6 +14,7 @@ ${BOLD}Developer:${RESET}
   code [options] <task>                 Generate or improve code
   review [options] [file...] [focus]    Review code from files/stdin
   json [options] <prompt>               Native structured JSON output
+  ai-commit [options]                   Generate commit message from staged diff
 
 ${BOLD}Model:${RESET}
   models                                List installed models
@@ -51,12 +52,20 @@ ${BOLD}json options:${RESET}
   --schema <file>                       Use JSON Schema as Ollama format
   -r, --response-only                   Print only validated model JSON (requires jq)
 
+${BOLD}ai-commit options:${RESET}
+  -y, --yes                             Commit generated message immediately
+  -e, --edit                            Edit generated message before commit
+  -p, --print                           Print generated message only
+  --refresh-prompt                      Refresh cached prompt from infocyph/Toolset
+
 ${BOLD}Environment:${RESET}
   LLM_SM_CONTAINER                      Container name (default: llm-sm)
   LLM_SM_URL                            API base URL (default: http://127.0.0.1:11434)
   LLM_SM_MODEL                          Default/fallback model (default: qwen2.5:3b)
   LLM_SM_SYSTEM                         Default system text for prompt
   LLM_SM_LIB_DIR                        Override installed module directory
+  LLM_SM_AI_COMMIT_PROMPT_B64           Override ai-commit system prompt
+  GITX_SYS_INSTRUCTION_B64              Reuse gitx prompt override
   OLLAMA_PORT                           Port when LLM_SM_URL is unset
   NO_COLOR                              Disable colored output
 
@@ -69,5 +78,7 @@ ${BOLD}Examples:${RESET}
   cat src/Foo.php | llm-sm review
   llm-sm json -r "Return an object with name and version"
   llm-sm json --schema schema.json -r "Describe this service"
+  git add . && llm-sm ai-commit
+  llm-sm ai-commit --print
 EOF
 }
