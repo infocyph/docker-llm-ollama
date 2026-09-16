@@ -40,7 +40,7 @@ jobs:
             RELEASE_TAG="$EVENT_RELEASE_TAG"
             PUBLISH_RELEASE_TAG=true
           else
-            echo "Fetching latest release tag..."
+            echo "Scheduled build: resolving the latest published release for source checkout."
             RELEASE_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
             PUBLISH_RELEASE_TAG=false
           fi
@@ -52,7 +52,7 @@ jobs:
 
           echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
           echo "PUBLISH_RELEASE_TAG=$PUBLISH_RELEASE_TAG" >> "$GITHUB_ENV"
-          echo "Using release tag: $RELEASE_TAG"
+          echo "Source release: $RELEASE_TAG"
           echo "Publish immutable release tag: $PUBLISH_RELEASE_TAG"
 
       - name: Resolve image name
