@@ -23,6 +23,7 @@ The default image bakes `qwen2.5:3b` into the container during build, so it can 
 | Setting | Default |
 |---|---|
 | Model | `qwen2.5:3b` |
+| Ollama base | `ollama/ollama:latest` |
 | API port | `11434` |
 | Parallel requests | `1` |
 | Loaded models | `1` |
@@ -32,6 +33,8 @@ The default image bakes `qwen2.5:3b` into the container during build, so it can 
 `OLLAMA_NUM_PARALLEL=1` is intentionally conservative for local machines. Higher parallelism increases memory use and should be enabled only when the host has enough RAM/VRAM.
 
 ## Build
+
+CPU or NVIDIA build:
 
 ```bash
 docker build -t infocyph/llm-sm:local .
@@ -45,11 +48,19 @@ docker build \
   -t infocyph/llm-sm:local .
 ```
 
-The selected model is downloaded at build time and becomes part of the image.
+AMD ROCm build:
+
+```bash
+docker build \
+  --build-arg OLLAMA_BASE_IMAGE=ollama/ollama:rocm \
+  -t infocyph/llm-sm:local-amd .
+```
+
+The selected model is downloaded at build time and becomes part of the image. `OLLAMA_BASE_IMAGE` defaults to `ollama/ollama:latest`; AMD ROCm builds override it with `ollama/ollama:rocm`.
 
 ## Run
 
-CPU:
+### CPU
 
 ```bash
 docker run --rm \
@@ -58,24 +69,182 @@ docker run --rm \
   infocyph/llm-sm:local
 ```
 
-NVIDIA GPU:
+### NVIDIA GPU
+
+Install and configure the NVIDIA Container Toolkit on the host, then expose all NVIDIA GPUs with Docker's `--gpus` flag:
 
 ```bash
 docker run --rm \
   --name llm-sm \
-  --gpus all \
+  --gpus=all \
   -p 127.0.0.1:11434:11434 \
   infocyph/llm-sm:local
 ```
+
+The Docker flag is `--gpus=all` / `--gpus all` (plural), not `--gpu=all`.
+
+### AMD GPU
+
+Build the ROCm variant first:
+
+```bash
+docker build \
+  --build-arg OLLAMA_BASE_IMAGE=ollama/ollama:rocm \
+  -t infocyph/llm-sm:local-amd .
+```
+
+Then pass the AMD KFD and DRI devices through to the container:
+
+```bash
+docker run --rm \
+  --name llm-sm \
+  --device=/dev/kfd \
+  --device=/dev/dri \
+  -p 127.0.0.1:11434:11434 \
+  infocyph/llm-sm:local-amd
+```
+
+AMD GPU support here targets Linux hosts supported by Ollama/ROCm. If device permissions prevent GPU discovery, check the host permissions/group IDs for `/dev/kfd` and `/dev/dri` and add the required groups to the container.
 
 The API is intentionally bound to localhost in these examples. Expose it to another interface only when you explicitly need network access and have appropriate network controls in place.
 
 ## Docker Compose
 
+The repository's default `compose.yml` is the CPU-safe configuration:
+
 ```bash
 cp .env.example .env
 docker compose up --build -d
 ```
+
+Ready-to-run examples are also provided under `examples/compose/`:
+
+```text
+examples/compose/
+├── cpu.yml
+├── nvidia.yml
+└── amd.yml
+```
+
+### CPU Compose
+
+```yaml
+services:
+  llm-sm:
+    build:
+      context: .
+      args:
+        OLLAMA_BASE_IMAGE: ollama/ollama:latest
+        OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+    image: infocyph/llm-sm:local-cpu
+    container_name: llm-sm
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    environment:
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
+      OLLAMA_NO_CLOUD: ${OLLAMA_NO_CLOUD:-1}
+```
+
+Run the checked-in example from the repository root:
+
+```bash
+docker compose -f examples/compose/cpu.yml up --build -d
+```
+
+### NVIDIA GPU Compose
+
+Docker Compose 2.30+ supports `gpus: all` directly:
+
+```yaml
+services:
+  llm-sm:
+    build:
+      context: .
+      args:
+        OLLAMA_BASE_IMAGE: ollama/ollama:latest
+        OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+    image: infocyph/llm-sm:local-nvidia
+    container_name: llm-sm
+    restart: unless-stopped
+    gpus: all
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    environment:
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
+      OLLAMA_NO_CLOUD: ${OLLAMA_NO_CLOUD:-1}
+```
+
+Run the checked-in example:
+
+```bash
+docker compose -f examples/compose/nvidia.yml up --build -d
+```
+
+For older Compose releases, the equivalent reservation syntax is:
+
+```yaml
+deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: all
+          capabilities: [gpu]
+```
+
+### AMD GPU Compose
+
+AMD uses the ROCm Ollama base and Linux device passthrough rather than NVIDIA's `gpus: all` mechanism:
+
+```yaml
+services:
+  llm-sm:
+    build:
+      context: .
+      args:
+        OLLAMA_BASE_IMAGE: ollama/ollama:rocm
+        OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+    image: infocyph/llm-sm:local-amd
+    container_name: llm-sm
+    restart: unless-stopped
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    environment:
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
+      OLLAMA_NO_CLOUD: ${OLLAMA_NO_CLOUD:-1}
+```
+
+Run the checked-in example:
+
+```bash
+docker compose -f examples/compose/amd.yml up --build -d
+```
+
+If AMD device permissions require explicit groups, determine the numeric group IDs on the host:
+
+```bash
+ls -lnd /dev/kfd /dev/dri /dev/dri/*
+```
+
+Then add the relevant IDs to the service, for example:
+
+```yaml
+group_add:
+  - "44"
+  - "109"
+```
+
+Do not copy those example IDs blindly; use the IDs reported by your host.
 
 Check status:
 
@@ -119,6 +288,7 @@ The default layout is:
 /usr/local/bin/llm-sm
 /usr/local/lib/llm-sm/lib/
 /usr/local/lib/llm-sm/commands/
+/usr/local/lib/llm-sm/prompts/
 ```
 
 A user-local installation keeps the same prefix layout:
@@ -145,7 +315,10 @@ scripts/
 ├── lib/
 │   ├── core.sh
 │   ├── docker.sh
-│   └── ollama.sh
+│   ├── ollama.sh
+│   └── commit.sh
+├── prompts/
+│   └── ai-commit.txt
 └── commands/
     ├── ask.sh
     ├── chat.sh
@@ -153,10 +326,11 @@ scripts/
     ├── code.sh
     ├── review.sh
     ├── json.sh
+    ├── ai-commit.sh
     └── ...
 ```
 
-This keeps command behavior isolated while shared Docker/Ollama/input helpers stay reusable.
+This keeps command behavior isolated while shared Docker/Ollama/input helpers and reusable prompts stay maintainable.
 
 ### Developer commands
 
@@ -209,6 +383,34 @@ cat src/Service.php | llm-sm review
 
 `review` prioritizes correctness, security, performance, concurrency, resource handling, edge cases, compatibility risks, and production failure modes rather than style-only noise.
 
+### AI commit
+
+Generate a commit message from staged changes using the bundled Conventional Commit + Gitmoji prompt and the local Ollama model:
+
+```bash
+git add .
+llm-sm ai-commit
+```
+
+The default flow prints the generated message and asks whether to commit, edit, or cancel.
+
+Non-interactive options:
+
+```bash
+llm-sm ai-commit --print
+llm-sm ai-commit --yes
+llm-sm ai-commit --edit
+llm-sm ai-commit -m qwen2.5:3b
+```
+
+The prompt is bundled at `scripts/prompts/ai-commit.txt`; this feature does not depend on Toolset, `gitx`, Gemini, or a network prompt source.
+
+Use a different local prompt without modifying the installation:
+
+```bash
+LLM_SM_AI_COMMIT_PROMPT_FILE=/path/to/prompt.txt llm-sm ai-commit
+```
+
 ### Structured JSON
 
 Use Ollama's native JSON mode:
@@ -244,6 +446,7 @@ llm-sm json \
 | `llm-sm code [options] <task>` | Generate or improve code |
 | `llm-sm review [options] [file...] [focus]` | Review files or piped code |
 | `llm-sm json [options] <prompt>` | Native structured JSON output |
+| `llm-sm ai-commit [options]` | Generate/commit a message from staged changes |
 | `llm-sm status` | Container state, health, API endpoint and model |
 | `llm-sm start` | Start the existing container |
 | `llm-sm stop` | Stop the container |
@@ -362,6 +565,13 @@ Common variables:
 | `OLLAMA_MAX_QUEUE` | Maximum queued requests while busy |
 | `OLLAMA_NO_CLOUD` | Disable Ollama cloud functionality |
 
+Build arguments:
+
+| Argument | Purpose | Default |
+|---|---|---|
+| `OLLAMA_MODEL` | Model baked into the image | `qwen2.5:3b` |
+| `OLLAMA_BASE_IMAGE` | Ollama runtime base image | `ollama/ollama:latest` |
+
 ## Model strategy
 
 This repository intentionally bakes one small model into each built image instead of downloading the model at container startup.
@@ -403,6 +613,7 @@ The `CLI Check` workflow validates the host tooling on pull requests and `main`:
 - ShellCheck across all Bash files
 - repository-layout smoke tests
 - installed-layout smoke tests
+- bundled `ai-commit` prompt validation
 - idempotent reinstall
 - uninstall cleanup
 
