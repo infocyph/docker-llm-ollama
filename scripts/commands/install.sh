@@ -25,8 +25,15 @@ command_main() {
       sudo install -m 0755 "$LLM_SM_ENTRYPOINT" "$target_bin"
     fi
     if [[ "$source_root" != "$lib_target" ]]; then
-      sudo rm -rf -- "${lib_target:?}/lib" "${lib_target:?}/commands"
-      sudo cp -R -- "$source_root/lib" "$source_root/commands" "$lib_target/"
+      sudo rm -rf -- \
+        "${lib_target:?}/lib" \
+        "${lib_target:?}/commands" \
+        "${lib_target:?}/prompts"
+      sudo cp -R -- \
+        "$source_root/lib" \
+        "$source_root/commands" \
+        "$source_root/prompts" \
+        "$lib_target/"
       sudo chmod -R a+rX "$lib_target"
     fi
   else
@@ -34,8 +41,15 @@ command_main() {
       install -m 0755 "$LLM_SM_ENTRYPOINT" "$target_bin"
     fi
     if [[ "$source_root" != "$lib_target" ]]; then
-      rm -rf -- "${lib_target:?}/lib" "${lib_target:?}/commands"
-      cp -R -- "$source_root/lib" "$source_root/commands" "$lib_target/"
+      rm -rf -- \
+        "${lib_target:?}/lib" \
+        "${lib_target:?}/commands" \
+        "${lib_target:?}/prompts"
+      cp -R -- \
+        "$source_root/lib" \
+        "$source_root/commands" \
+        "$source_root/prompts" \
+        "$lib_target/"
       chmod -R a+rX "$lib_target"
     fi
   fi
