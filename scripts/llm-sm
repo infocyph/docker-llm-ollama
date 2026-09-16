@@ -1,347 +1,53 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-VERSION="0.1.0"
-CONTAINER="${LLM_SM_CONTAINER:-llm-sm}"
-API_URL="${LLM_SM_URL:-http://127.0.0.1:${OLLAMA_PORT:-11434}}"
-DEFAULT_MODEL_FALLBACK="${LLM_SM_MODEL:-qwen2.5:3b}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ENTRYPOINT="$SCRIPT_DIR/$(basename -- "${BASH_SOURCE[0]}")"
 
-if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
-  BOLD=$'\033[1m'
-  GREEN=$'\033[32m'
-  YELLOW=$'\033[33m'
-  RED=$'\033[31m'
-  RESET=$'\033[0m'
+if [[ -f "$SCRIPT_DIR/lib/core.sh" && -d "$SCRIPT_DIR/commands" ]]; then
+  RUNTIME_ROOT="$SCRIPT_DIR"
 else
-  BOLD=''
-  GREEN=''
-  YELLOW=''
-  RED=''
-  RESET=''
+  PREFIX="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+  RUNTIME_ROOT="${LLM_SM_LIB_DIR:-$PREFIX/lib/llm-sm}"
 fi
 
-info() { printf '%s\n' "${GREEN}$*${RESET}"; }
-die() { printf '%s\n' "${RED}Error:${RESET} $*" >&2; exit 1; }
-
-require_command() {
-  command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
-}
-
-container_exists() {
-  docker inspect "$CONTAINER" >/dev/null 2>&1
-}
-
-container_running() {
-  [[ "$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null || true)" == "true" ]]
-}
-
-require_container() {
-  container_exists || die "Container '$CONTAINER' does not exist. Start it with Docker Compose or docker run first."
-}
-
-require_running() {
-  require_container
-  container_running || die "Container '$CONTAINER' is not running. Run: llm-sm start"
-}
-
-exec_ollama() {
-  require_running
-
-  local exec_args=(-i)
-  if [[ -t 0 && -t 1 ]]; then
-    exec_args=(-it)
+for required in \
+  "$RUNTIME_ROOT/lib/core.sh" \
+  "$RUNTIME_ROOT/lib/docker.sh" \
+  "$RUNTIME_ROOT/lib/ollama.sh"; do
+  if [[ ! -f "$required" ]]; then
+    printf 'Error: llm-sm runtime file not found: %s\n' "$required" >&2
+    exit 1
   fi
+done
 
-  docker exec "${exec_args[@]}" "$CONTAINER" /bin/ollama "$@"
-}
+export LLM_SM_ENTRYPOINT="$ENTRYPOINT"
+export LLM_SM_RUNTIME_ROOT="$RUNTIME_ROOT"
 
-container_model() {
-  local model
-  model="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null \
-    | sed -n 's/^OLLAMA_MODEL=//p' \
-    | head -n 1 || true)"
+# shellcheck source=/dev/null
+source "$RUNTIME_ROOT/lib/core.sh"
+# shellcheck source=/dev/null
+source "$RUNTIME_ROOT/lib/docker.sh"
+# shellcheck source=/dev/null
+source "$RUNTIME_ROOT/lib/ollama.sh"
 
-  printf '%s\n' "${model:-$DEFAULT_MODEL_FALLBACK}"
-}
+command="${1:-help}"
+[[ $# -eq 0 ]] || shift
 
-api_url() {
-  local path="${1:-/}"
+case "$command" in
+  -h|--help) command="help" ;;
+  -v|--version) command="version" ;;
+  list) command="models" ;;
+  remove) command="rm" ;;
+esac
 
-  case "$path" in
-    http://*|https://*) printf '%s\n' "$path" ;;
-    /*) printf '%s%s\n' "${API_URL%/}" "$path" ;;
-    *) printf '%s/%s\n' "${API_URL%/}" "$path" ;;
-  esac
-}
+[[ "$command" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "Invalid command: $command"
 
-print_help() {
-  cat <<EOF
-${BOLD}llm-sm${RESET} - host CLI for the local Ollama small-model container
+command_file="$RUNTIME_ROOT/commands/$command.sh"
+[[ -f "$command_file" ]] || die "Unknown command: $command. Run 'llm-sm help'."
 
-${BOLD}Usage:${RESET}
-  llm-sm <command> [arguments]
+# shellcheck source=/dev/null
+source "$command_file"
+declare -F command_main >/dev/null 2>&1 || die "Command module is invalid: $command"
 
-${BOLD}Container:${RESET}
-  status                    Show container, health, API and model status
-  start                     Start the existing container
-  stop                      Stop the container
-  restart                   Restart the container
-  logs [docker-log-args...] Follow logs (default: -f)
-
-${BOLD}Model:${RESET}
-  models                    List installed models
-  ps                        List currently loaded models
-  chat [model]              Start an interactive chat
-  ask [-m model] <prompt>   Ask the default or selected model once
-  run <model> [prompt...]   Run an explicit model
-  show [model]              Show model information
-  pull <model>              Pull a model into the current container
-  rm <model>                Remove a model from the current container
-  unload [model]            Unload a model from RAM/VRAM
-
-${BOLD}Low level:${RESET}
-  ollama <args...>          Pass arguments directly to the Ollama CLI
-  api <path> [curl-args...] Call the Ollama HTTP API with curl
-  version                   Show wrapper and Ollama versions
-
-${BOLD}Host install:${RESET}
-  install [directory]       Install as a global host command
-  uninstall [directory]     Remove the installed host command
-
-${BOLD}Environment:${RESET}
-  LLM_SM_CONTAINER          Container name (default: llm-sm)
-  LLM_SM_URL                API base URL (default: http://127.0.0.1:11434)
-  LLM_SM_MODEL              Fallback default model (default: qwen2.5:3b)
-  OLLAMA_PORT               Port used when LLM_SM_URL is unset
-  NO_COLOR                  Disable colored output
-
-${BOLD}Examples:${RESET}
-  llm-sm status
-  llm-sm ask "Explain PHP fibers briefly"
-  llm-sm ask -m qwen2.5:3b "Write a PHP readonly DTO"
-  llm-sm chat
-  llm-sm models
-  llm-sm ollama show qwen2.5:3b
-  llm-sm api /api/tags
-  llm-sm api /api/generate -H 'Content-Type: application/json' -d '{"model":"qwen2.5:3b","prompt":"Hello","stream":false}'
-EOF
-}
-
-ensure_target_dir() {
-  local target_dir="$1"
-
-  [[ -d "$target_dir" ]] && return 0
-
-  if mkdir -p -- "$target_dir" 2>/dev/null; then
-    return 0
-  fi
-
-  if command -v sudo >/dev/null 2>&1; then
-    sudo mkdir -p -- "$target_dir"
-    return 0
-  fi
-
-  die "Cannot create installation directory: $target_dir"
-}
-
-install_self() {
-  local target_dir="${1:-/usr/local/bin}"
-  local source_path target_path
-
-  source_path="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/$(basename -- "${BASH_SOURCE[0]}")"
-  target_path="${target_dir%/}/llm-sm"
-
-  ensure_target_dir "$target_dir"
-
-  if [[ -w "$target_dir" ]]; then
-    install -m 0755 "$source_path" "$target_path"
-  elif command -v sudo >/dev/null 2>&1; then
-    sudo install -m 0755 "$source_path" "$target_path"
-  else
-    die "'$target_dir' is not writable and sudo is unavailable"
-  fi
-
-  info "Installed: $target_path"
-}
-
-uninstall_self() {
-  local target_dir="${1:-/usr/local/bin}"
-  local target_path="${target_dir%/}/llm-sm"
-
-  [[ -e "$target_path" ]] || die "Not installed at: $target_path"
-
-  if [[ -w "$target_dir" ]]; then
-    rm -f -- "$target_path"
-  elif command -v sudo >/dev/null 2>&1; then
-    sudo rm -f -- "$target_path"
-  else
-    die "'$target_dir' is not writable and sudo is unavailable"
-  fi
-
-  info "Removed: $target_path"
-}
-
-cmd_status() {
-  if ! container_exists; then
-    printf 'Container: %snot found%s (%s)\n' "$RED" "$RESET" "$CONTAINER"
-    printf 'API:       %s\n' "$API_URL"
-    return 1
-  fi
-
-  local state health model
-  state="$(docker inspect -f '{{.State.Status}}' "$CONTAINER")"
-  health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}not-configured{{end}}' "$CONTAINER")"
-  model="$(container_model)"
-
-  printf 'Container: %s (%s)\n' "$CONTAINER" "$state"
-  printf 'Health:    %s\n' "$health"
-  printf 'API:       %s\n' "$API_URL"
-  printf 'Model:     %s\n' "$model"
-
-  if container_running; then
-    if command -v curl >/dev/null 2>&1 && curl -fsS --max-time 2 "$(api_url /api/tags)" >/dev/null 2>&1; then
-      printf 'API state: %sreachable%s\n' "$GREEN" "$RESET"
-    else
-      printf 'API state: %sunreachable%s\n' "$YELLOW" "$RESET"
-    fi
-  fi
-}
-
-cmd_ask() {
-  local model prompt
-  model="$(container_model)"
-
-  if [[ "${1:-}" == "-m" || "${1:-}" == "--model" ]]; then
-    [[ $# -ge 2 ]] || die "Missing model after $1"
-    model="$2"
-    shift 2
-  fi
-
-  if [[ $# -gt 0 ]]; then
-    prompt="$*"
-  elif [[ ! -t 0 ]]; then
-    prompt="$(cat)"
-  else
-    die "Prompt required. Example: llm-sm ask \"Hello\""
-  fi
-
-  [[ -n "$prompt" ]] || die "Prompt cannot be empty"
-  exec_ollama run "$model" "$prompt"
-}
-
-cmd_logs() {
-  require_container
-  if [[ $# -eq 0 ]]; then
-    docker logs -f "$CONTAINER"
-  else
-    docker logs "$@" "$CONTAINER"
-  fi
-}
-
-cmd_api() {
-  require_command curl
-  local path="${1:-}"
-  [[ -n "$path" ]] || die "API path required. Example: llm-sm api /api/tags"
-  shift
-  curl --fail-with-body -sS "$@" "$(api_url "$path")"
-  printf '\n'
-}
-
-main() {
-  local command="${1:-help}"
-  [[ $# -eq 0 ]] || shift
-
-  case "$command" in
-    help|-h|--help)
-      print_help
-      ;;
-    status)
-      require_command docker
-      cmd_status
-      ;;
-    start)
-      require_command docker
-      require_container
-      docker start "$CONTAINER"
-      ;;
-    stop)
-      require_command docker
-      require_container
-      docker stop "$CONTAINER"
-      ;;
-    restart)
-      require_command docker
-      require_container
-      docker restart "$CONTAINER"
-      ;;
-    logs)
-      require_command docker
-      cmd_logs "$@"
-      ;;
-    models|list)
-      require_command docker
-      exec_ollama list
-      ;;
-    ps)
-      require_command docker
-      exec_ollama ps
-      ;;
-    chat)
-      require_command docker
-      exec_ollama run "${1:-$(container_model)}"
-      ;;
-    ask)
-      require_command docker
-      cmd_ask "$@"
-      ;;
-    run)
-      require_command docker
-      [[ $# -ge 1 ]] || die "Model required. Example: llm-sm run qwen2.5:3b"
-      exec_ollama run "$@"
-      ;;
-    show)
-      require_command docker
-      exec_ollama show "${1:-$(container_model)}"
-      ;;
-    pull)
-      require_command docker
-      [[ $# -eq 1 ]] || die "Usage: llm-sm pull <model>"
-      exec_ollama pull "$1"
-      ;;
-    rm|remove)
-      require_command docker
-      [[ $# -eq 1 ]] || die "Usage: llm-sm rm <model>"
-      exec_ollama rm "$1"
-      ;;
-    unload)
-      require_command docker
-      exec_ollama stop "${1:-$(container_model)}"
-      ;;
-    ollama)
-      require_command docker
-      [[ $# -ge 1 ]] || die "Ollama arguments required"
-      exec_ollama "$@"
-      ;;
-    api)
-      cmd_api "$@"
-      ;;
-    version|-v|--version)
-      printf 'llm-sm %s\n' "$VERSION"
-      if command -v docker >/dev/null 2>&1 && container_running; then
-        exec_ollama --version
-      fi
-      ;;
-    install)
-      require_command install
-      install_self "${1:-/usr/local/bin}"
-      ;;
-    uninstall)
-      uninstall_self "${1:-/usr/local/bin}"
-      ;;
-    *)
-      die "Unknown command: $command. Run 'llm-sm help'."
-      ;;
-  esac
-}
-
-main "$@"
+command_main "$@"
