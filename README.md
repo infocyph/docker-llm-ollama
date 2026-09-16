@@ -34,6 +34,7 @@ For reproducible deployments, pin a release tag rather than a moving tag.
 | Setting | Default |
 |---|---|
 | Model | `qwen2.5:3b` |
+| Persistent model volume | `llm-sm-data` |
 | API port | `11434` |
 | Parallel requests | `1` |
 | Loaded models | `1` |
@@ -65,6 +66,28 @@ docker pull infocyph/llm-sm:v1.0.0
 docker pull infocyph/llm-sm:amd-v1.0.0
 ```
 
+## Persistent model state
+
+`/root/.ollama` is mounted from the named Docker volume `llm-sm-data` by default. This keeps user-managed model state independent from the container lifecycle.
+
+On first use, Docker creates the empty named volume and initializes it from the baked `/root/.ollama` contents in the image. The baked default model is therefore available immediately while the volume becomes the persistent model store afterward.
+
+Models pulled or removed through `llm-sm` survive:
+
+- container restart
+- container stop/start
+- `docker compose down` followed by `up`
+- container recreation
+- replacing the container with a newer image while reusing the same volume
+
+The model store is removed only when the volume itself is explicitly removed, for example with `docker compose down -v` or `docker volume rm llm-sm-data`.
+
+Use a different persistent model store by changing `LLM_SM_VOLUME`:
+
+```bash
+LLM_SM_VOLUME=my-models docker compose up -d
+```
+
 ## Run
 
 ### CPU
@@ -74,6 +97,7 @@ docker run -d \
   --name llm-sm \
   --restart unless-stopped \
   -p 127.0.0.1:11434:11434 \
+  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
   infocyph/llm-sm:latest
 ```
 
@@ -85,6 +109,7 @@ docker run -d \
   --restart unless-stopped \
   --gpus=all \
   -p 127.0.0.1:11434:11434 \
+  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
   infocyph/llm-sm:latest
 ```
 
@@ -97,6 +122,7 @@ docker run -d \
   --device=/dev/kfd \
   --device=/dev/dri \
   -p 127.0.0.1:11434:11434 \
+  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
   infocyph/llm-sm:amd-latest
 ```
 
@@ -117,6 +143,7 @@ docker run -d \
   --name llm-sm \
   --restart unless-stopped \
   -p 127.0.0.1:11434:11434 \
+  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
   -v "$PWD:/workspace" \
   -w /workspace \
   infocyph/llm-sm:latest
@@ -124,7 +151,7 @@ docker run -d \
 
 For NVIDIA, add `--gpus=all`; for AMD use the `amd-*` image plus `/dev/kfd` and `/dev/dri` device mappings.
 
-The mount is a Docker runtime concern; the image does not manage or discover host directories itself. Docker cannot add a new bind mount to an already-created container, so mount the repository (or a broader workspace directory) when the container is created if repo-aware commands are needed.
+The workspace mount is a Docker runtime concern; the image does not manage or discover host directories itself. Docker cannot add a new bind mount to an already-created container, so mount the repository or a broader workspace directory when the container is created if repo-aware commands are needed.
 
 Once mounted, keep using the same running container:
 
@@ -144,7 +171,7 @@ For read-only analysis, the repository can be mounted read-only:
 
 ## Docker Compose
 
-The default `compose.yml` consumes the published CPU/NVIDIA image:
+The default `compose.yml` consumes the published CPU/NVIDIA image and persists `/root/.ollama`:
 
 ```yaml
 services:
@@ -154,11 +181,17 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - llm-sm-data:/root/.ollama
     environment:
       OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
       OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
       OLLAMA_NO_CLOUD: ${OLLAMA_NO_CLOUD:-1}
+
+volumes:
+  llm-sm-data:
+    name: ${LLM_SM_VOLUME:-llm-sm-data}
 ```
 
 Run it with:
@@ -208,14 +241,19 @@ LLM_SM_AMD_IMAGE=ghcr.io/infocyph/llm-sm:amd-v1.0.0 \
   docker compose -f examples/compose/amd.yml up -d
 ```
 
-A repository/workspace mount can be added to any Compose service when repo-aware commands are wanted:
+A repository/workspace mount can be added while keeping the model volume:
 
 ```yaml
 services:
   llm-sm:
     volumes:
+      - llm-sm-data:/root/.ollama
       - .:/workspace
     working_dir: /workspace
+
+volumes:
+  llm-sm-data:
+    name: ${LLM_SM_VOLUME:-llm-sm-data}
 ```
 
 ## Bundled `llm-sm` CLI
@@ -256,7 +294,7 @@ cat src/HotPath.php | docker exec -i llm-sm llm-sm code "Optimize without changi
 
 ### Model management
 
-The CLI itself is fixed; models are user-managed runtime state.
+The CLI itself is fixed; models are user-managed persistent runtime state in `/root/.ollama`.
 
 ```bash
 docker exec -it llm-sm llm-sm models
@@ -273,7 +311,7 @@ Select a model per request:
 docker exec -it llm-sm llm-sm ask -m qwen2.5:1.5b "Explain CQRS"
 ```
 
-An additionally pulled model lives in the current container writable layer. It survives stop/start but is lost if that container is removed or recreated. The baked model remains the reproducible deployment model.
+With the default `llm-sm-data` volume, model additions and removals survive container replacement. This lets users change the model set without changing or mutating the bundled CLI.
 
 ### Developer commands
 
@@ -442,6 +480,7 @@ docker run -d \
   --name llm-sm \
   --restart unless-stopped \
   -p 127.0.0.1:11434:11434 \
+  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
   -e OLLAMA_NUM_PARALLEL=2 \
   -e OLLAMA_KEEP_ALIVE=15m \
   infocyph/llm-sm:latest
@@ -451,15 +490,16 @@ docker run -d \
 
 One small model is baked into each published image instead of being downloaded at container startup.
 
+The image supplies the initial deterministic model state; the named volume supplies persistent user-managed state. This gives immediate first startup while allowing users to add, remove, or select other models without losing those changes when a container is replaced.
+
 Advantages:
 
 - deterministic release images
 - immediate startup after image pull
 - no first-run model download
 - offline operation after the image is pulled
-- image and baked model can be versioned together
-
-Additional model pulls are intentionally treated as mutable container state.
+- persistent user-selected models
+- fixed CLI/runtime tooling independent from mutable model data
 
 ## Publishing
 
