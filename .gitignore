@@ -1,0 +1,7 @@
+.idea
+.vscode
+.codex
+.env
+.env.*
+*.log
+*~
