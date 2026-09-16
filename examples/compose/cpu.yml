@@ -5,7 +5,7 @@ services:
       args:
         OLLAMA_BASE_IMAGE: ollama/ollama:latest
         OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
-    image: infocyph/llm-sm:local-cpu
+    image: infocyph/llm-sm:local
     container_name: llm-sm
     restart: unless-stopped
     ports:
