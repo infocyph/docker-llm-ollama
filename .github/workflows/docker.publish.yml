@@ -15,10 +15,10 @@ jobs:
       matrix:
         include:
           - variant: standard
-            image_suffix: ''
+            tag_prefix: ''
             ollama_base_image: ollama/ollama:latest
           - variant: amd
-            image_suffix: '-amd'
+            tag_prefix: 'amd-'
             ollama_base_image: ollama/ollama:rocm
     permissions:
       contents: read
@@ -56,13 +56,10 @@ jobs:
           echo "Publish immutable release tag: $PUBLISH_RELEASE_TAG"
 
       - name: Resolve image name
-        env:
-          IMAGE_SUFFIX: ${{ matrix.image_suffix }}
         run: |
-          BASE_IMAGE_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2 | sed 's/^docker-//')
-          IMAGE_NAME="${BASE_IMAGE_NAME}${IMAGE_SUFFIX}"
+          IMAGE_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2 | sed 's/^docker-//')
           echo "IMAGE_NAME=$IMAGE_NAME" >> "$GITHUB_ENV"
-          echo "Publishing image: $IMAGE_NAME"
+          echo "Publishing image repository: $IMAGE_NAME"
 
       - name: Check out the release tag
         uses: actions/checkout@v7
@@ -91,8 +88,8 @@ jobs:
             docker.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
             ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=${{ env.RELEASE_TAG }},enable=${{ env.PUBLISH_RELEASE_TAG }}
-            type=raw,value=latest
+            type=raw,value=${{ matrix.tag_prefix }}${{ env.RELEASE_TAG }},enable=${{ env.PUBLISH_RELEASE_TAG }}
+            type=raw,value=${{ matrix.tag_prefix }}latest
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
