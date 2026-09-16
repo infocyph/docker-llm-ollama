@@ -11,16 +11,23 @@ A self-contained local LLM image powered by Ollama.
 
 The default image bakes `qwen2.5:3b` into the container during build, so it can start serving immediately without downloading model weights on first run.
 
-## Registries
+## Registries and tags
 
-Every release publishes two image families. The standard image supports CPU and NVIDIA deployments; the AMD image uses Ollama's ROCm runtime.
+CPU/NVIDIA and AMD ROCm variants are published in the same image repository.
 
-| Variant | Docker Hub | GitHub Container Registry |
+| Registry | Image |
+|---|---|
+| Docker Hub | `docker.io/infocyph/llm-sm` |
+| GitHub Container Registry | `ghcr.io/infocyph/llm-sm` |
+
+For a release such as `v1.0.0`:
+
+| Variant | Release tag | Moving tag |
 |---|---|---|
-| CPU / NVIDIA | `docker.io/infocyph/llm-sm` | `ghcr.io/infocyph/llm-sm` |
-| AMD ROCm | `docker.io/infocyph/llm-sm-amd` | `ghcr.io/infocyph/llm-sm-amd` |
+| CPU / NVIDIA | `v1.0.0` | `latest` |
+| AMD ROCm | `amd-v1.0.0` | `amd-latest` |
 
-For a release such as `v1.0.0`, the workflow publishes both `v1.0.0` and `latest` tags for each image family.
+Release-version tags are immutable. Weekly scheduled builds refresh only `latest` and `amd-latest` against the current upstream Ollama bases.
 
 ## Defaults
 
@@ -57,7 +64,7 @@ AMD ROCm build:
 ```bash
 docker build \
   --build-arg OLLAMA_BASE_IMAGE=ollama/ollama:rocm \
-  -t infocyph/llm-sm-amd:local .
+  -t infocyph/llm-sm:amd-local .
 ```
 
 The selected model is downloaded at build time and becomes part of the image. `OLLAMA_BASE_IMAGE` defaults to `ollama/ollama:latest`; AMD ROCm builds override it with `ollama/ollama:rocm`.
@@ -89,26 +96,16 @@ The Docker flag is `--gpus=all` / `--gpus all` (plural), not `--gpu=all`.
 
 ### AMD GPU
 
-Build the ROCm variant first:
-
-```bash
-docker build \
-  --build-arg OLLAMA_BASE_IMAGE=ollama/ollama:rocm \
-  -t infocyph/llm-sm-amd:local .
-```
-
-Then pass the AMD KFD and DRI devices through to the container:
-
 ```bash
 docker run --rm \
   --name llm-sm \
   --device=/dev/kfd \
   --device=/dev/dri \
   -p 127.0.0.1:11434:11434 \
-  infocyph/llm-sm-amd:local
+  infocyph/llm-sm:amd-local
 ```
 
-AMD GPU support here targets Linux hosts supported by Ollama/ROCm. If device permissions prevent GPU discovery, check the host permissions/group IDs for `/dev/kfd` and `/dev/dri` and add the required groups to the container.
+AMD GPU support targets Linux hosts supported by Ollama/ROCm. If device permissions prevent GPU discovery, check the host permissions/group IDs for `/dev/kfd` and `/dev/dri` and add the required groups to the container.
 
 The API is intentionally bound to localhost in these examples. Expose it to another interface only when you explicitly need network access and have appropriate network controls in place.
 
@@ -213,7 +210,7 @@ services:
       args:
         OLLAMA_BASE_IMAGE: ollama/ollama:rocm
         OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
-    image: infocyph/llm-sm-amd:local
+    image: infocyph/llm-sm:amd-local
     container_name: llm-sm
     restart: unless-stopped
     devices:
@@ -592,14 +589,14 @@ The trade-off is a larger Docker image. For frequently changing or multiple mode
 
 ## Publishing
 
-Each GitHub Release publishes both runtime variants in parallel:
+Each GitHub Release builds both runtime variants in parallel and publishes them to the same image repository on Docker Hub and GHCR:
 
-- `infocyph/llm-sm:<release>` and `infocyph/llm-sm:latest` from `ollama/ollama:latest` for CPU/NVIDIA
-- `infocyph/llm-sm-amd:<release>` and `infocyph/llm-sm-amd:latest` from `ollama/ollama:rocm` for AMD ROCm
-- both image families are pushed to Docker Hub and GHCR
+- CPU/NVIDIA: `<release>` and `latest`
+- AMD ROCm: `amd-<release>` and `amd-latest`
 - each variant has its own Buildx cache scope
-- each registry/image pair receives build provenance attestation
-- the weekly rebuild republishes both image families from the latest GitHub release tag against current upstream Ollama bases
+- each pushed digest receives build provenance attestation
+- weekly scheduled rebuilds check out the latest published release source and refresh only `latest` and `amd-latest`
+- immutable release tags such as `v1.0.0` and `amd-v1.0.0` are never overwritten by scheduled builds
 
 Required repository secrets:
 
@@ -616,6 +613,7 @@ The `CLI Check` workflow validates the host tooling on pull requests and `main`:
 
 - `bash -n` across the entrypoint, libraries, and all command modules
 - ShellCheck across all Bash files
+- CPU/NVIDIA/AMD Compose configuration validation
 - repository-layout smoke tests
 - installed-layout smoke tests
 - bundled `ai-commit` prompt validation
