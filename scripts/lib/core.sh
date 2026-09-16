@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# Shared by dynamically loaded command modules.
+# shellcheck disable=SC2034
 VERSION="0.2.0"
 CONTAINER="${LLM_SM_CONTAINER:-llm-sm}"
 API_URL="${LLM_SM_URL:-http://127.0.0.1:${OLLAMA_PORT:-11434}}"
