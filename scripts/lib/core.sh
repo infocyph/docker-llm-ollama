@@ -3,9 +3,8 @@
 # Shared by dynamically loaded command modules.
 # shellcheck disable=SC2034
 VERSION="0.4.0"
-CONTAINER="${LLM_SM_CONTAINER:-llm-sm}"
-API_URL="${LLM_SM_URL:-http://127.0.0.1:${OLLAMA_PORT:-11434}}"
-DEFAULT_MODEL_FALLBACK="${LLM_SM_MODEL:-qwen2.5:3b}"
+API_URL="${LLM_SM_URL:-http://127.0.0.1:11434}"
+DEFAULT_MODEL_FALLBACK="qwen2.5:3b"
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   BOLD=$'\033[1m'
@@ -27,6 +26,11 @@ die() { printf '%s\n' "${RED}Error:${RESET} $*" >&2; exit 1; }
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+resolve_model() {
+  local explicit="${1:-}"
+  printf '%s\n' "${explicit:-${LLM_SM_MODEL:-${OLLAMA_MODEL:-$DEFAULT_MODEL_FALLBACK}}}"
 }
 
 read_input() {
@@ -59,16 +63,4 @@ file_context() {
     printf '%s\n' "--- FILE: $file ---"
     cat -- "$file"
   done
-}
-
-json_quote() {
-  local value="$1"
-  value=${value//\\/\\\\}
-  value=${value//\"/\\\"}
-  value=${value//$'\b'/\\b}
-  value=${value//$'\f'/\\f}
-  value=${value//$'\n'/\\n}
-  value=${value//$'\r'/\\r}
-  value=${value//$'\t'/\\t}
-  printf '"%s"' "$value"
 }

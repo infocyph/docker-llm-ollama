@@ -22,8 +22,48 @@ jobs:
         run: |
           bash -n scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh
           shellcheck -x scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh
-          test ! -e scripts/commands/install.sh
-          test ! -e scripts/commands/uninstall.sh
+
+          for retired in start stop restart status logs install uninstall; do
+            test ! -e "scripts/commands/${retired}.sh"
+          done
+          test ! -e scripts/lib/docker.sh
+
+          if grep -R -nE 'docker (inspect|exec|start|stop|restart|logs)|container_model|container_running|require_container|require_running' scripts; then
+            echo 'Host-side Docker lifecycle logic must not exist in the bundled CLI.' >&2
+            exit 1
+          fi
+
+      - name: Validate command registry
+        run: |
+          diff -u \
+            <(printf '%s\n' ai-commit api ask chat code help json models ollama prompt ps pull review rm run show unload version | sort) \
+            <(find scripts/commands -maxdepth 1 -type f -name '*.sh' -printf '%f\n' | sed 's/\.sh$//' | sort)
+
+          help_output="$(./scripts/llm-sm help)"
+          for command in ai-commit api ask chat code json models ollama prompt ps pull review rm run show unload version; do
+            grep -Eq "^  ${command}[[:space:]]" <<< "$help_output"
+          done
+
+      - name: Validate model and JSON contracts
+        run: |
+          core="$PWD/scripts/lib/core.sh"
+          ollama="$PWD/scripts/lib/ollama.sh"
+
+          test "$(LLM_SM_MODEL=env-model OLLAMA_MODEL=runtime-model bash -c 'source "$1"; resolve_model explicit-model' _ "$core")" = explicit-model
+          test "$(LLM_SM_MODEL=env-model OLLAMA_MODEL=runtime-model bash -c 'source "$1"; resolve_model' _ "$core")" = env-model
+          test "$(env -u LLM_SM_MODEL OLLAMA_MODEL=runtime-model bash -c 'source "$1"; resolve_model' _ "$core")" = runtime-model
+          test "$(env -u LLM_SM_MODEL -u OLLAMA_MODEL bash -c 'source "$1"; resolve_model' _ "$core")" = qwen2.5:3b
+
+          bash -c 'source "$1"; source "$2"; build_generate_payload "test-model" "hello\nworld" "{\"type\":\"object\"}"' _ "$core" "$ollama" \
+            | jq -e '.model == "test-model" and .stream == false and .format.type == "object"' >/dev/null
+
+          bad_schema="$(mktemp)"
+          printf '{bad\n' > "$bad_schema"
+          if ./scripts/llm-sm json --schema "$bad_schema" test >/tmp/llm-sm-json.out 2>/tmp/llm-sm-json.err; then
+            echo 'Malformed schema unexpectedly succeeded.' >&2
+            exit 1
+          fi
+          grep -q 'Schema file is not valid JSON' /tmp/llm-sm-json.err
 
       - name: Validate Compose examples
         run: |
@@ -34,9 +74,14 @@ jobs:
 
       - name: Smoke test repository CLI
         run: |
+          expected_version="$(sed -n 's/^VERSION="\([^"]*\)"/\1/p' scripts/lib/core.sh)"
+          test -n "$expected_version"
+
           ./scripts/llm-sm help >/dev/null
           ./scripts/llm-sm ai-commit --help >/dev/null
-          ./scripts/llm-sm version | grep -q '^llm-sm 0.4.0$'
+          test "$(./scripts/llm-sm version | head -n 1)" = "llm-sm $expected_version"
+          test "$(./scripts/llm-sm -v | head -n 1)" = "llm-sm $expected_version"
+          ./scripts/llm-sm -h >/dev/null
           test -s scripts/prompts/ai-commit.txt
 
       - name: Smoke test bundled image layout
@@ -47,7 +92,8 @@ jobs:
           cp -R scripts/lib scripts/commands scripts/prompts "$root/usr/local/lib/llm-sm/"
           chmod 0755 "$root/usr/local/bin/llm-sm"
 
+          expected_version="$(sed -n 's/^VERSION="\([^"]*\)"/\1/p' scripts/lib/core.sh)"
           "$root/usr/local/bin/llm-sm" help >/dev/null
           "$root/usr/local/bin/llm-sm" ai-commit --help >/dev/null
-          "$root/usr/local/bin/llm-sm" version | grep -q '^llm-sm 0.4.0$'
+          test "$("$root/usr/local/bin/llm-sm" version | head -n 1)" = "llm-sm $expected_version"
           test -s "$root/usr/local/lib/llm-sm/prompts/ai-commit.txt"

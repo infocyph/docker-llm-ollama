@@ -1,12 +1,7 @@
 #!/usr/bin/env bash
 
 command_main() {
-  local model schema_file response_only prompt format_json response
-  model="$DEFAULT_MODEL_FALLBACK"
-  if command -v docker >/dev/null 2>&1 && container_exists; then
-    model="$(container_model)"
-  fi
-
+  local model="" schema_file response_only prompt format_json response
   schema_file=""
   response_only=0
 
@@ -35,13 +30,15 @@ command_main() {
     esac
   done
 
+  require_command jq
+  model="$(resolve_model "$model")"
   prompt="$(read_input "$@")" || die "Prompt required. Example: llm-sm json \"Return name and version\""
   [[ -n "$prompt" ]] || die "Prompt cannot be empty"
 
   if [[ -n "$schema_file" ]]; then
     [[ -f "$schema_file" ]] || die "Schema file not found: $schema_file"
-    format_json="$(cat -- "$schema_file")"
-    [[ -n "$format_json" ]] || die "Schema file is empty: $schema_file"
+    [[ -s "$schema_file" ]] || die "Schema file is empty: $schema_file"
+    format_json="$(jq -ce . "$schema_file" 2>/dev/null)" || die "Schema file is not valid JSON: $schema_file"
   else
     format_json='"json"'
   fi
@@ -49,7 +46,6 @@ command_main() {
   response="$(post_generate_json "$model" "$prompt" "$format_json")"
 
   if (( response_only )); then
-    require_command jq
     printf '%s\n' "$response" | jq -er '.response' | jq .
   else
     printf '%s\n' "$response"

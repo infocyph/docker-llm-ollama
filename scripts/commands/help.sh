@@ -19,26 +19,11 @@ ${BOLD}Developer:${RESET}
 ${BOLD}Model:${RESET}
   models                                List installed models
   ps                                    List loaded models
-  run <model> [prompt...]               Run an explicit model
+  run <model> [prompt...]               Run an explicit installed model
   show [model]                          Show model information
   pull <model>                          Pull a model
   rm <model>                            Remove a model
   unload [model]                        Unload a model from RAM/VRAM
-EOF
-
-  if ! in_container; then
-    cat <<EOF
-
-${BOLD}Container:${RESET}
-  status                                Show container/API/model status
-  start                                 Start existing container
-  stop                                  Stop container
-  restart                               Restart container
-  logs [docker-log-args...]             Follow/read container logs
-EOF
-  fi
-
-  cat <<EOF
 
 ${BOLD}Low level:${RESET}
   ollama <args...>                      Raw Ollama CLI passthrough
@@ -64,10 +49,10 @@ ${BOLD}ai-commit options:${RESET}
 
 ${BOLD}Environment:${RESET}
   LLM_SM_URL                            API base URL (default: http://127.0.0.1:11434)
-  LLM_SM_MODEL                          Default/fallback model (default: qwen2.5:3b)
+  LLM_SM_MODEL                          Default model override
+  OLLAMA_MODEL                          Image/runtime default model
   LLM_SM_SYSTEM                         Default system text for prompt
   LLM_SM_AI_COMMIT_PROMPT_FILE          Override bundled ai-commit prompt file
-  OLLAMA_PORT                           Port when LLM_SM_URL is unset
   NO_COLOR                              Disable colored output
 
 ${BOLD}Examples:${RESET}

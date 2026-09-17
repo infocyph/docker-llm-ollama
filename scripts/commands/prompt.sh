@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 command_main() {
-  local model system input stdin_data file_data
+  local model="" system input stdin_data file_data
   local -a files=()
-  model="$(container_model)"
   system="${LLM_SM_SYSTEM:-}"
 
   while [[ $# -gt 0 ]]; do
@@ -32,6 +31,7 @@ command_main() {
     esac
   done
 
+  model="$(resolve_model "$model")"
   input="${*:-}"
   stdin_data="$(read_stdin_if_piped)"
   file_data="$(file_context "${files[@]}")"

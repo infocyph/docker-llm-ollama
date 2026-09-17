@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 command_main() {
-  local model task stdin_data file_data context instruction
+  local model="" task stdin_data file_data context instruction
   local -a files=()
-  model="$(container_model)"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -26,6 +25,7 @@ command_main() {
     esac
   done
 
+  model="$(resolve_model "$model")"
   task="${*:-}"
   stdin_data="$(read_stdin_if_piped)"
   file_data="$(file_context "${files[@]}")"

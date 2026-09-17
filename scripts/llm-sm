@@ -13,7 +13,6 @@ fi
 
 for required in \
   "$RUNTIME_ROOT/lib/core.sh" \
-  "$RUNTIME_ROOT/lib/docker.sh" \
   "$RUNTIME_ROOT/lib/ollama.sh"; do
   if [[ ! -f "$required" ]]; then
     printf 'Error: llm-sm runtime file not found: %s\n' "$required" >&2
@@ -26,8 +25,6 @@ export LLM_SM_RUNTIME_ROOT="$RUNTIME_ROOT"
 
 # shellcheck source=/dev/null
 source "$RUNTIME_ROOT/lib/core.sh"
-# shellcheck source=/dev/null
-source "$RUNTIME_ROOT/lib/docker.sh"
 # shellcheck source=/dev/null
 source "$RUNTIME_ROOT/lib/ollama.sh"
 

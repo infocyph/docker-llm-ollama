@@ -2,7 +2,7 @@
 
 command_main() {
   local model
-  model="${1:-$(container_model)}"
   [[ $# -le 1 ]] || die "Usage: llm-sm unload [model]"
+  model="$(resolve_model "${1:-}")"
   exec_ollama stop "$model"
 }

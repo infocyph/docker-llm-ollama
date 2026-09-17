@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 command_main() {
-  local model focus stdin_data file_data context instruction
+  local model="" focus stdin_data file_data context instruction
   local -a files=() remaining=()
-  model="$(container_model)"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -29,6 +28,8 @@ command_main() {
         ;;
     esac
   done
+
+  model="$(resolve_model "$model")"
 
   local item
   local -a focus_parts=()
