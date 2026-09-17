@@ -45,6 +45,7 @@ command_main() {
         kind="$(attachment_kind "$2")"
         case "$kind" in
           image) images+=("$2") ;;
+          unsupported-image) die "Unsupported image format for --attach: $2. Use PNG, JPEG, or WebP." ;;
           pdf) pdfs+=("$2") ;;
           text) files+=("$2") ;;
         esac
