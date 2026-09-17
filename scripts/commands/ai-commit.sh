@@ -117,6 +117,7 @@ command_main() {
   fi
 
   [[ -s "$diff_file" ]] || die "No diff content found"
+  check_file_budget "Git diff" "$diff_file"
 
   warn "Analyzing changes with $model..."
   load_ai_commit_prompt > "$prompt_file"
