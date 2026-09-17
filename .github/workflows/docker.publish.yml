@@ -5,11 +5,28 @@ on:
     types: [published]
   schedule:
     - cron: '0 0 * * 0'
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: Release tag to rebuild; blank selects the latest stable release
+        required: false
+        default: ''
+        type: string
+      publish_immutable:
+        description: Also publish the immutable release tag (never overwrite an existing tag)
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: docker-publish
+  cancel-in-progress: false
 
 jobs:
   push_to_registries:
     name: Publish ${{ matrix.variant }} image
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -17,54 +34,174 @@ jobs:
           - variant: standard
             tag_prefix: ''
             ollama_base_image: ollama/ollama:latest
+            runtime_smoke: true
           - variant: amd
             tag_prefix: 'amd-'
             ollama_base_image: ollama/ollama:rocm
+            runtime_smoke: false
+
     permissions:
       contents: read
       packages: write
       attestations: write
       artifact-metadata: write
       id-token: write
-    steps:
-      - name: Check out the repository
-        uses: actions/checkout@v7
 
-      - name: Resolve release tag
+    steps:
+      - name: Check out current validation tooling
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.event.repository.default_branch }}
+          path: .automation
+          persist-credentials: false
+
+      - name: Resolve release source and publication policy
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
+          MANUAL_SOURCE_TAG: ${{ inputs.source_tag }}
+          MANUAL_PUBLISH_IMMUTABLE: ${{ inputs.publish_immutable }}
         run: |
-          if [ "$EVENT_NAME" = "release" ]; then
+          set -euo pipefail
+
+          if [[ "$EVENT_NAME" == 'release' ]]; then
             RELEASE_TAG="$EVENT_RELEASE_TAG"
             PUBLISH_RELEASE_TAG=true
+          elif [[ "$EVENT_NAME" == 'workflow_dispatch' && -n "$MANUAL_SOURCE_TAG" ]]; then
+            RELEASE_TAG="$MANUAL_SOURCE_TAG"
+            PUBLISH_RELEASE_TAG="${MANUAL_PUBLISH_IMMUTABLE:-false}"
           else
-            echo "Scheduled build: resolving the latest published release for source checkout."
-            RELEASE_TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName')
-            PUBLISH_RELEASE_TAG=false
+            echo 'Scheduled/manual refresh: resolving latest stable published release.'
+            RELEASE_TAG="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)"
+            if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
+              PUBLISH_RELEASE_TAG="${MANUAL_PUBLISH_IMMUTABLE:-false}"
+            else
+              PUBLISH_RELEASE_TAG=false
+            fi
           fi
 
-          if [ -z "$RELEASE_TAG" ]; then
-            echo "No release found. Exiting."
+          [[ -n "$RELEASE_TAG" ]] || { echo 'No published release source found.' >&2; exit 1; }
+
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")"
+          is_draft="$(jq -r '.draft' <<<"$release_json")"
+          is_prerelease="$(jq -r '.prerelease' <<<"$release_json")"
+
+          [[ "$is_draft" != 'true' ]] || { echo "Refusing draft release source: $RELEASE_TAG" >&2; exit 1; }
+
+          if [[ "$is_prerelease" == 'true' ]]; then
+            PUBLISH_LATEST_TAG=false
+          else
+            PUBLISH_LATEST_TAG=true
+          fi
+
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' && "$is_prerelease" == 'true' && "$PUBLISH_RELEASE_TAG" != 'true' ]]; then
+            echo 'A prerelease cannot move stable latest tags. Set publish_immutable=true to publish only its immutable tag.' >&2
             exit 1
           fi
 
-          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
-          echo "PUBLISH_RELEASE_TAG=$PUBLISH_RELEASE_TAG" >> "$GITHUB_ENV"
-          echo "Source release: $RELEASE_TAG"
-          echo "Publish immutable release tag: $PUBLISH_RELEASE_TAG"
+          {
+            echo "RELEASE_TAG=$RELEASE_TAG"
+            echo "PUBLISH_RELEASE_TAG=$PUBLISH_RELEASE_TAG"
+            echo "PUBLISH_LATEST_TAG=$PUBLISH_LATEST_TAG"
+            echo "SOURCE_IS_PRERELEASE=$is_prerelease"
+          } >> "$GITHUB_ENV"
+
+          {
+            echo '## Publish resolution'
+            echo
+            echo "- Event: \`$EVENT_NAME\`"
+            echo "- Source release: \`$RELEASE_TAG\`"
+            echo "- Prerelease: \`$is_prerelease\`"
+            echo "- Publish immutable tag: \`$PUBLISH_RELEASE_TAG\`"
+            echo "- Publish stable latest tag: \`$PUBLISH_LATEST_TAG\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Resolve image name
         run: |
-          IMAGE_NAME=$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2 | sed 's/^docker-//')
+          set -euo pipefail
+          IMAGE_NAME="$(echo "$GITHUB_REPOSITORY" | cut -d'/' -f2 | sed 's/^docker-//')"
           echo "IMAGE_NAME=$IMAGE_NAME" >> "$GITHUB_ENV"
-          echo "Publishing image repository: $IMAGE_NAME"
 
-      - name: Check out the release tag
+      - name: Check out exact release source
         uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_TAG }}
+          path: .release
+          persist-credentials: false
+
+      - name: Capture source revision
+        run: echo "SOURCE_SHA=$(git -C .release rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Resolve upstream Ollama base once
+        env:
+          OLLAMA_BASE_IMAGE: ${{ matrix.ollama_base_image }}
+        run: |
+          set -euo pipefail
+          inspect="$(docker buildx imagetools inspect "$OLLAMA_BASE_IMAGE")"
+          digest="$(awk '/^Digest:/ {print $2; exit}' <<<"$inspect")"
+          [[ "$digest" == sha256:* ]] || { printf '%s\n' "$inspect" >&2; exit 1; }
+          {
+            echo "OLLAMA_BASE_DIGEST=$digest"
+            echo "RESOLVED_OLLAMA_BASE_IMAGE=${OLLAMA_BASE_IMAGE}@${digest}"
+            echo "CANDIDATE_IMAGE=llm-sm:publish-candidate-${{ matrix.variant }}"
+          } >> "$GITHUB_ENV"
+
+      - name: Build validated release candidate
+        uses: docker/build-push-action@v7
+        with:
+          context: .release
+          platforms: linux/amd64
+          load: true
+          pull: true
+          push: false
+          tags: llm-sm:publish-candidate-${{ matrix.variant }}
+          build-args: |
+            OLLAMA_BASE_IMAGE=${{ env.RESOLVED_OLLAMA_BASE_IMAGE }}
+          cache-from: type=gha,scope=publish-candidate-${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=publish-candidate-${{ matrix.variant }}
+          provenance: false
+          sbom: false
+
+      - name: Run standard runtime release gate
+        if: matrix.runtime_smoke
+        env:
+          OLLAMA_MODEL: qwen2.5:3b
+        run: .automation/scripts/ci/runtime-smoke.sh "$CANDIDATE_IMAGE"
+
+      - name: Record candidate metadata
+        env:
+          OLLAMA_MODEL: qwen2.5:3b
+        run: |
+          set -euo pipefail
+          ollama_version="$(docker run --rm --entrypoint /bin/ollama "$CANDIDATE_IMAGE" --version | head -n 1)"
+          cli_version="$(docker run --rm --entrypoint llm-sm "$CANDIDATE_IMAGE" version | head -n 1)"
+          model_digest='build-verified; runtime digest not queried on this variant'
+
+          if [[ '${{ matrix.runtime_smoke }}' == 'true' ]]; then
+            name="llm-sm-meta-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
+            trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+            docker run -d --name "$name" "$CANDIDATE_IMAGE" >/dev/null
+            for _ in $(seq 1 90); do
+              status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$name" 2>/dev/null || true)"
+              [[ "$status" == 'healthy' ]] && break
+              [[ "$status" == 'unhealthy' ]] && { docker logs "$name" >&2 || true; exit 1; }
+              sleep 2
+            done
+            [[ "$(docker inspect -f '{{.State.Health.Status}}' "$name")" == 'healthy' ]]
+            tags="$(docker exec "$name" curl --connect-timeout 3 -fsS http://127.0.0.1:11434/api/tags)"
+            model_digest="$(jq -r --arg model "$OLLAMA_MODEL" 'first(.models[]? | select(.name == $model or .model == $model) | .digest) // empty' <<<"$tags")"
+            [[ -n "$model_digest" ]]
+          fi
+
+          {
+            echo "OLLAMA_VERSION=$ollama_version"
+            echo "CLI_VERSION=$cli_version"
+            echo "MODEL_DIGEST=$model_digest"
+          } >> "$GITHUB_ENV"
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v4
@@ -80,6 +217,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
+      - name: Enforce immutable release tags
+        if: env.PUBLISH_RELEASE_TAG == 'true'
+        env:
+          IMMUTABLE_TAG: ${{ matrix.tag_prefix }}${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          assert_absent() {
+            local image="$1" output
+            if output="$(docker buildx imagetools inspect "$image" 2>&1)"; then
+              echo "Refusing to overwrite immutable release tag: $image" >&2
+              return 1
+            fi
+            case "$output" in
+              *'not found'*|*'manifest unknown'*|*'NAME_UNKNOWN'*) return 0 ;;
+              *) printf '%s\n' "$output" >&2; return 1 ;;
+            esac
+          }
+          assert_absent "docker.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${IMMUTABLE_TAG}"
+          assert_absent "ghcr.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${IMMUTABLE_TAG}"
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -87,36 +244,113 @@ jobs:
           images: |
             docker.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
             ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
           tags: |
-            type=raw,value=${{ matrix.tag_prefix }}${{ env.RELEASE_TAG }},enable=${{ env.PUBLISH_RELEASE_TAG }}
-            type=raw,value=${{ matrix.tag_prefix }}latest
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+            type=raw,value=${{ matrix.tag_prefix }}${{ env.RELEASE_TAG }},enable=${{ env.PUBLISH_RELEASE_TAG == 'true' }}
+            type=raw,value=${{ matrix.tag_prefix }}latest,enable=${{ env.PUBLISH_LATEST_TAG == 'true' }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.version=${{ env.RELEASE_TAG }}
 
       - name: Build and push Docker images
         id: push
         uses: docker/build-push-action@v7
         with:
-          context: .
+          context: .release
+          platforms: linux/amd64
+          pull: false
           push: true
           build-args: |
-            OLLAMA_BASE_IMAGE=${{ matrix.ollama_base_image }}
+            OLLAMA_BASE_IMAGE=${{ env.RESOLVED_OLLAMA_BASE_IMAGE }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.variant }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
+          cache-from: type=gha,scope=publish-candidate-${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=publish-${{ matrix.variant }}
+          provenance: mode=max
+          sbom: true
 
-      - name: Generate artifact attestation for Docker Hub
+      - name: Generate Docker Hub provenance attestation
         uses: actions/attest@v4
         with:
           subject-name: docker.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
-      - name: Generate artifact attestation for GHCR
+      - name: Generate GHCR provenance attestation
         uses: actions/attest@v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+
+      - name: Verify published digest and platform
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          RELEASE_REF: ${{ matrix.tag_prefix }}${{ env.RELEASE_TAG }}
+          LATEST_REF: ${{ matrix.tag_prefix }}latest
+        run: |
+          set -euo pipefail
+          if [[ "$PUBLISH_RELEASE_TAG" == 'true' ]]; then verify_tag="$RELEASE_REF"; else verify_tag="$LATEST_REF"; fi
+
+          verify_digest() {
+            local ref="$1" found
+            found="$(docker buildx imagetools inspect "$ref" | awk '/^Digest:/ {print $2; exit}')"
+            [[ "$found" == "$DIGEST" ]] || { echo "Digest mismatch for $ref: ${found:-<empty>}" >&2; return 1; }
+          }
+
+          verify_digest "docker.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${verify_tag}"
+          verify_digest "ghcr.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${verify_tag}"
+
+          for registry in docker.io ghcr.io; do
+            ref="${registry}/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}@${DIGEST}"
+            docker pull --platform linux/amd64 "$ref" >/dev/null
+            test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$ref")" = 'linux/amd64'
+          done
+
+      - name: Verify published standard runtime by digest
+        if: matrix.runtime_smoke
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          OLLAMA_MODEL: qwen2.5:3b
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}@${DIGEST}"
+          name="llm-sm-published-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+          docker run -d --name "$name" "$image" >/dev/null
+          for _ in $(seq 1 90); do
+            status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$name" 2>/dev/null || true)"
+            [[ "$status" == 'healthy' ]] && break
+            [[ "$status" == 'unhealthy' ]] && { docker logs "$name" >&2 || true; exit 1; }
+            sleep 2
+          done
+          [[ "$(docker inspect -f '{{.State.Health.Status}}' "$name")" == 'healthy' ]]
+          tags="$(docker exec "$name" curl --connect-timeout 3 -fsS http://127.0.0.1:11434/api/tags)"
+          jq -e --arg model "$OLLAMA_MODEL" 'any(.models[]?; .name == $model or .model == $model)' <<<"$tags" >/dev/null
+
+      - name: Summarize publication
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          {
+            echo "## Published ${{ matrix.variant }} image"
+            echo
+            echo "- Source release: \`$RELEASE_TAG\`"
+            echo "- Source revision: \`$SOURCE_SHA\`"
+            echo "- Source prerelease: \`$SOURCE_IS_PRERELEASE\`"
+            echo "- Upstream base: \`${{ matrix.ollama_base_image }}\`"
+            echo "- Resolved base digest: \`$OLLAMA_BASE_DIGEST\`"
+            echo "- Ollama: \`$OLLAMA_VERSION\`"
+            echo "- CLI: \`$CLI_VERSION\`"
+            echo "- Default model: \`qwen2.5:3b\`"
+            echo "- Model digest: \`$MODEL_DIGEST\`"
+            echo "- Published digest: \`$DIGEST\`"
+            echo "- Platform: \`linux/amd64\`"
+            echo "- Immutable tag published: \`$PUBLISH_RELEASE_TAG\`"
+            echo "- Stable moving tag published: \`$PUBLISH_LATEST_TAG\`"
+            echo '- BuildKit provenance: `mode=max`'
+            echo '- BuildKit SBOM: enabled'
+            echo '- GitHub/Sigstore provenance: Docker Hub + GHCR'
+          } >> "$GITHUB_STEP_SUMMARY"
