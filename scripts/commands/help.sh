@@ -10,7 +10,7 @@ ${BOLD}Usage:${RESET}
 ${BOLD}Developer:${RESET}
   ask [-m model] <prompt>               Ask once
   chat [model]                          Start interactive chat
-  prompt [options] <prompt>             Generic prompt with system/file context
+  prompt [options] <prompt>             Generic prompt with files/images/PDF context
   code [options] <task>                 Generate or improve code
   review [options] [file...] [focus]    Review code from files/stdin
   json [options] <prompt>               Native structured JSON output
@@ -19,26 +19,11 @@ ${BOLD}Developer:${RESET}
 ${BOLD}Model:${RESET}
   models                                List installed models
   ps                                    List loaded models
-  run <model> [prompt...]               Run an explicit model
+  run <model> [prompt...]               Run an explicit installed model
   show [model]                          Show model information
   pull <model>                          Pull a model
   rm <model>                            Remove a model
   unload [model]                        Unload a model from RAM/VRAM
-EOF
-
-  if ! in_container; then
-    cat <<EOF
-
-${BOLD}Container:${RESET}
-  status                                Show container/API/model status
-  start                                 Start existing container
-  stop                                  Stop container
-  restart                               Restart container
-  logs [docker-log-args...]             Follow/read container logs
-EOF
-  fi
-
-  cat <<EOF
 
 ${BOLD}Low level:${RESET}
   ollama <args...>                      Raw Ollama CLI passthrough
@@ -47,10 +32,14 @@ ${BOLD}Low level:${RESET}
 
 ${BOLD}Common options:${RESET}
   -m, --model <model>                   Override model
-  -f, --file <path>                     Add file context (prompt/code/review)
+  -f, --file <path>                     Add text file context (prompt/code/review)
 
 ${BOLD}prompt options:${RESET}
   -s, --system <text>                   System-style instruction
+  --attach <path>                       Auto-detect text/image/PDF attachment
+  --image <path>                        Add image input (requires a vision model)
+  --pdf <path>                          Extract PDF text and add it as context
+  --pdf-vision <path>                   Render PDF pages as images for a vision model
 
 ${BOLD}json options:${RESET}
   --schema <file>                       Use JSON Schema as Ollama format
@@ -64,16 +53,24 @@ ${BOLD}ai-commit options:${RESET}
 
 ${BOLD}Environment:${RESET}
   LLM_SM_URL                            API base URL (default: http://127.0.0.1:11434)
-  LLM_SM_MODEL                          Default/fallback model (default: qwen2.5:3b)
+  LLM_SM_MODEL                          Default model override
+  OLLAMA_MODEL                          Image/runtime default model
   LLM_SM_SYSTEM                         Default system text for prompt
   LLM_SM_AI_COMMIT_PROMPT_FILE          Override bundled ai-commit prompt file
-  OLLAMA_PORT                           Port when LLM_SM_URL is unset
+  LLM_SM_INPUT_WARN_BYTES               Warn above this input size (default: 1048576)
+  LLM_SM_INPUT_MAX_BYTES                Optional hard limit; 0 disables it (default: 0)
+  LLM_SM_ALLOW_LARGE_INPUT=1            Bypass a configured non-zero hard input limit
+  LLM_SM_PDF_DPI                        PDF vision render DPI (default: 120)
   NO_COLOR                              Disable colored output
 
 ${BOLD}Examples:${RESET}
   llm-sm ask "Explain PHP fibers briefly"
   llm-sm chat
   llm-sm prompt -s "Answer concisely" "Explain CQRS"
+  llm-sm prompt --attach notes.txt "Summarize this"
+  llm-sm prompt -m qwen2.5vl:3b --image diagram.png "Explain this diagram"
+  llm-sm prompt --pdf architecture.pdf "Summarize the design"
+  llm-sm prompt -m qwen2.5vl:3b --pdf-vision scan.pdf "Read this scanned document"
   llm-sm code -f src/Foo.php "Optimize this hot path"
   llm-sm review src/Foo.php "Focus on concurrency and resource leaks"
   cat src/Foo.php | llm-sm review

@@ -1,0 +1,5 @@
+services:
+  llm-sm:
+    working_dir: /workspace
+    volumes:
+      - ${LLM_SM_WORKSPACE:-.}:/workspace:${LLM_SM_WORKSPACE_MODE:-ro}

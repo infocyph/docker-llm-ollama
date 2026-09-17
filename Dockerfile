@@ -17,8 +17,15 @@ ENV OLLAMA_HOST=0.0.0.0:11434 \
     LLM_SM_IN_CONTAINER=1 \
     LLM_SM_URL=http://127.0.0.1:11434
 
+RUN set -eu; \
+    test -x /bin/ollama; \
+    /bin/ollama --version; \
+    command -v apt-get >/dev/null 2>&1
+
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl git jq \
+    && apt-get install -y --no-install-recommends curl git jq poppler-utils \
+    && command -v pdftotext >/dev/null \
+    && command -v pdftoppm >/dev/null \
     && rm -rf /var/lib/apt/lists/*
 
 COPY scripts/llm-sm /usr/local/bin/llm-sm
@@ -42,7 +49,7 @@ RUN set -eu; \
     }; \
     trap cleanup EXIT INT TERM; \
     attempts=0; \
-    until /bin/ollama list >/dev/null 2>&1; do \
+    until curl --connect-timeout 1 -fsS http://127.0.0.1:11434/api/tags >/tmp/ollama-tags.json 2>/dev/null; do \
         attempts=$((attempts + 1)); \
         if [ "$attempts" -ge 60 ]; then \
             cat /tmp/ollama-build.log; \
@@ -52,12 +59,16 @@ RUN set -eu; \
     done; \
     /bin/ollama pull "$OLLAMA_MODEL"; \
     /bin/ollama show "$OLLAMA_MODEL" >/dev/null; \
-    rm -f /tmp/ollama-build.log
+    curl --connect-timeout 3 -fsS http://127.0.0.1:11434/api/tags >/tmp/ollama-tags.json; \
+    jq -e --arg model "$OLLAMA_MODEL" 'any(.models[]?; .name == $model or .model == $model)' /tmp/ollama-tags.json >/dev/null; \
+    rm -f /tmp/ollama-build.log /tmp/ollama-tags.json
 
 EXPOSE 11434
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD OLLAMA_HOST=127.0.0.1:11434 /bin/ollama list >/dev/null 2>&1 || exit 1
+    CMD curl --connect-timeout 2 -fsS http://127.0.0.1:11434/api/tags >/dev/null || exit 1
+
+STOPSIGNAL SIGTERM
 
 ENTRYPOINT ["/bin/ollama"]
 CMD ["serve"]

@@ -53,7 +53,7 @@ commit_with_message_file() {
 }
 
 command_main() {
-  local model="${LLM_SM_MODEL:-}"
+  local model=""
   local action="interactive"
   local diff_stdin=0
 
@@ -93,8 +93,7 @@ command_main() {
 
   require_command jq
   require_command curl
-
-  [[ -n "$model" ]] || model="$(container_model)"
+  model="$(resolve_model "$model")"
 
   AI_COMMIT_TMP="$(mktemp -d)"
   export AI_COMMIT_TMP
@@ -118,6 +117,7 @@ command_main() {
   fi
 
   [[ -s "$diff_file" ]] || die "No diff content found"
+  check_file_budget "Git diff" "$diff_file"
 
   warn "Analyzing changes with $model..."
   load_ai_commit_prompt > "$prompt_file"
@@ -144,7 +144,7 @@ command_main() {
       }
     }' > "$payload_file"
 
-  if ! curl --fail-with-body -sS \
+  if ! curl --connect-timeout 3 --fail-with-body -sS \
       -H 'Content-Type: application/json' \
       -d @"$payload_file" \
       "$(api_url /api/chat)" > "$response_file"; then
