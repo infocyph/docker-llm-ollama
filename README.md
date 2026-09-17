@@ -247,6 +247,50 @@ docker compose exec llm-sm llm-sm rm qwen2.5:1.5b
 
 The CLI does not silently pull a missing model when another command selects it.
 
+### Attachments and multimodal prompts
+
+`llm-sm prompt` accepts normal text context, large piped input, images and PDFs.
+
+Auto-detect a text file, image or PDF from its extension:
+
+```bash
+docker compose exec llm-sm \
+  llm-sm prompt --attach /workspace/notes.txt "Summarize this"
+```
+
+Use an image with a vision-capable model:
+
+```bash
+docker compose exec llm-sm llm-sm pull qwen2.5vl:3b
+
+docker compose exec llm-sm \
+  llm-sm prompt -m qwen2.5vl:3b \
+  --image /workspace/diagram.png \
+  "Explain this architecture diagram"
+```
+
+The baked `qwen2.5:3b` model remains the lightweight text default. The CLI never silently switches models or downloads a vision model. When image input is requested, the selected model must report Ollama's `vision` capability.
+
+For text-based PDFs, extract text locally and send it as normal context:
+
+```bash
+docker compose exec llm-sm \
+  llm-sm prompt --pdf /workspace/spec.pdf "Summarize the important requirements"
+```
+
+For scanned PDFs, diagrams, forms or layouts where the page image matters, render the PDF pages and send them to a vision model:
+
+```bash
+docker compose exec llm-sm \
+  llm-sm prompt -m qwen2.5vl:3b \
+  --pdf-vision /workspace/scanned-spec.pdf \
+  "Read and summarize this document"
+```
+
+`LLM_SM_PDF_DPI` controls page rendering and defaults to `120`. PDF text extraction/rendering is provided by the image's `poppler-utils` runtime dependency.
+
+Multiple `--attach`, `--image`, `--pdf` and `--pdf-vision` options can be supplied in one request.
+
 ### Structured JSON
 
 ```bash
@@ -273,26 +317,30 @@ git diff --cached | \
   docker compose exec -T llm-sm llm-sm ai-commit --diff-stdin
 ```
 
-## Input-size safety
+## Large-input behavior
 
-`prompt`, `code`, `review` and `ai-commit` guard large local context before inference.
+Large text, files and Git diffs are accepted by default. The CLI warns rather than rejects when context becomes unusually large.
 
 Defaults:
 
 ```text
-LLM_SM_INPUT_WARN_BYTES=65536
-LLM_SM_INPUT_MAX_BYTES=262144
+LLM_SM_INPUT_WARN_BYTES=1048576
+LLM_SM_INPUT_MAX_BYTES=0
 ```
 
-Input above the soft limit produces a warning. Input above the hard limit is rejected rather than silently truncated.
+`LLM_SM_INPUT_MAX_BYTES=0` means no CLI hard ceiling. The effective useful size is still bounded by the selected model's context window, Ollama/runtime memory and available host RAM/VRAM.
 
-A deliberate override is available:
+To impose a local policy ceiling, set a non-zero maximum:
 
-```text
-LLM_SM_ALLOW_LARGE_INPUT=1
+```bash
+LLM_SM_INPUT_MAX_BYTES=4194304
 ```
 
-The guard is byte-based by design; it does not pretend to provide exact tokenizer accounting for arbitrary models.
+If a non-zero ceiling is configured, `LLM_SM_ALLOW_LARGE_INPUT=1` can explicitly bypass it for a deliberate request. Input is never silently truncated by `llm-sm`.
+
+Large request bodies are built through temporary files and `jq --rawfile`/file-backed `curl` payloads rather than shell command-line arguments, avoiding normal shell argv-size limits for large diffs and document text.
+
+The byte guard is intentionally approximate; it does not pretend to provide exact tokenizer accounting for arbitrary models.
 
 ## Native Ollama API
 
@@ -366,6 +414,7 @@ The reusable `Runtime Check` performs the real model-bearing standard-image gate
 
 - fresh-volume baked-model presence
 - daemon health
+- PDF text/render tooling availability
 - non-streaming generation
 - streaming chat
 - bundled CLI inference
