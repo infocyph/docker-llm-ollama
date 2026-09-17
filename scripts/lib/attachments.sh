@@ -5,7 +5,7 @@ attachment_kind() {
   local lower="${path,,}"
 
   case "$lower" in
-    *.png|*.jpg|*.jpeg|*.webp|*.gif|*.bmp) printf '%s\n' image ;;
+    *.png|*.jpg|*.jpeg|*.webp) printf '%s\n' image ;;
     *.pdf) printf '%s\n' pdf ;;
     *) printf '%s\n' text ;;
   esac
