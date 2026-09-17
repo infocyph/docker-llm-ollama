@@ -73,6 +73,9 @@ docker network create "$network" >/dev/null
 printf 'Starting fresh-volume runtime smoke for %s...\n' "$IMAGE"
 start_container
 
+docker exec "$container" command -v pdftotext >/dev/null
+docker exec "$container" command -v pdftoppm >/dev/null
+
 tags="$(docker exec "$container" curl --connect-timeout 3 -fsS http://127.0.0.1:11434/api/tags)"
 jq -e --arg model "$MODEL" 'any(.models[]?; .name == $model or .model == $model)' <<<"$tags" >/dev/null
 
