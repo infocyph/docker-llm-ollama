@@ -116,7 +116,7 @@ grep -q "is not installed. Run 'llm-sm pull" "$tmp_dir/missing.err"
 docker exec "$container" sh -c 'printf smoke > /root/.ollama/.llm-sm-persistence-smoke'
 
 printf 'Validating clean SIGTERM shutdown...\n'
-docker stop --time 30 "$container" >/dev/null
+docker stop --timeout 30 "$container" >/dev/null
 test "$(docker inspect -f '{{.State.Running}}' "$container")" = false
 test "$(docker inspect -f '{{.State.OOMKilled}}' "$container")" = false
 docker rm "$container" >/dev/null
@@ -129,7 +129,7 @@ tags="$(docker exec "$container" curl --connect-timeout 3 -fsS http://127.0.0.1:
 jq -e --arg model "$MODEL" 'any(.models[]?; .name == $model or .model == $model)' <<<"$tags" >/dev/null
 peer_get /api/tags >/dev/null
 
-docker stop --time 30 "$container" >/dev/null
+docker stop --timeout 30 "$container" >/dev/null
 test "$(docker inspect -f '{{.State.Running}}' "$container")" = false
 test "$(docker inspect -f '{{.State.OOMKilled}}' "$container")" = false
 
