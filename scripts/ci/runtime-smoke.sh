@@ -25,8 +25,8 @@ cleanup() {
 trap cleanup EXIT
 
 wait_healthy() {
-  local attempt status
-  for attempt in $(seq 1 90); do
+  local status
+  for _ in $(seq 1 90); do
     status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$container" 2>/dev/null || true)"
     case "$status" in
       healthy) return 0 ;;
