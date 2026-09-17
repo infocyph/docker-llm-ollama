@@ -23,7 +23,9 @@ RUN set -eu; \
     command -v apt-get >/dev/null 2>&1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl git jq \
+    && apt-get install -y --no-install-recommends curl git jq poppler-utils \
+    && command -v pdftotext >/dev/null \
+    && command -v pdftoppm >/dev/null \
     && rm -rf /var/lib/apt/lists/*
 
 COPY scripts/llm-sm /usr/local/bin/llm-sm

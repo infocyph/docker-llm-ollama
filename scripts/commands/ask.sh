@@ -13,5 +13,6 @@ command_main() {
   prompt="$(read_input "$@")" || die "Prompt required. Example: llm-sm ask \"Hello\""
   [[ -n "$prompt" ]] || die "Prompt cannot be empty"
 
+  check_input_budget "Prompt input" "$prompt"
   run_text_prompt "$model" "" "$prompt"
 }

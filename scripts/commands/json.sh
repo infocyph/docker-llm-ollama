@@ -34,6 +34,7 @@ command_main() {
   model="$(resolve_model "$model")"
   prompt="$(read_input "$@")" || die "Prompt required. Example: llm-sm json \"Return name and version\""
   [[ -n "$prompt" ]] || die "Prompt cannot be empty"
+  check_input_budget "JSON prompt" "$prompt"
 
   if [[ -n "$schema_file" ]]; then
     [[ -f "$schema_file" ]] || die "Schema file not found: $schema_file"

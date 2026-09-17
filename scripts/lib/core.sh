@@ -5,8 +5,8 @@
 VERSION="0.4.0"
 API_URL="${LLM_SM_URL:-http://127.0.0.1:11434}"
 DEFAULT_MODEL_FALLBACK="qwen2.5:3b"
-DEFAULT_INPUT_WARN_BYTES=65536
-DEFAULT_INPUT_MAX_BYTES=262144
+DEFAULT_INPUT_WARN_BYTES=1048576
+DEFAULT_INPUT_MAX_BYTES=0
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   BOLD=$'\033[1m'
@@ -40,8 +40,11 @@ validate_input_limits() {
   local max_bytes="${LLM_SM_INPUT_MAX_BYTES:-$DEFAULT_INPUT_MAX_BYTES}"
 
   [[ "$warn_bytes" =~ ^[0-9]+$ ]] || die "LLM_SM_INPUT_WARN_BYTES must be a non-negative integer"
-  [[ "$max_bytes" =~ ^[1-9][0-9]*$ ]] || die "LLM_SM_INPUT_MAX_BYTES must be a positive integer"
-  (( warn_bytes <= max_bytes )) || die "LLM_SM_INPUT_WARN_BYTES cannot exceed LLM_SM_INPUT_MAX_BYTES"
+  [[ "$max_bytes" =~ ^[0-9]+$ ]] || die "LLM_SM_INPUT_MAX_BYTES must be a non-negative integer"
+
+  if (( max_bytes > 0 && warn_bytes > max_bytes )); then
+    die "LLM_SM_INPUT_WARN_BYTES cannot exceed a non-zero LLM_SM_INPUT_MAX_BYTES"
+  fi
 }
 
 check_input_bytes() {
@@ -53,12 +56,12 @@ check_input_bytes() {
   validate_input_limits
   [[ "$bytes" =~ ^[0-9]+$ ]] || die "Invalid byte count for $label"
 
-  if (( bytes > max_bytes )) && [[ "${LLM_SM_ALLOW_LARGE_INPUT:-0}" != "1" ]]; then
-    die "$label is ${bytes} bytes; the safety limit is ${max_bytes}. Narrow the input or set LLM_SM_ALLOW_LARGE_INPUT=1 deliberately."
+  if (( max_bytes > 0 && bytes > max_bytes )) && [[ "${LLM_SM_ALLOW_LARGE_INPUT:-0}" != "1" ]]; then
+    die "$label is ${bytes} bytes; the configured safety limit is ${max_bytes}. Narrow the input, raise LLM_SM_INPUT_MAX_BYTES, set it to 0 for unlimited input, or set LLM_SM_ALLOW_LARGE_INPUT=1 deliberately."
   fi
 
-  if (( bytes > warn_bytes )); then
-    warn "$label is ${bytes} bytes; local 3B inference may be slow or lose useful context."
+  if (( warn_bytes > 0 && bytes > warn_bytes )); then
+    warn "$label is ${bytes} bytes; the selected model may be slow or lose useful context. The request will still be sent."
   fi
 }
 
