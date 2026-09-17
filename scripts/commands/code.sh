@@ -47,5 +47,6 @@ command_main() {
     task+=$'\n\nContext:\n'"$context"
   fi
 
+  check_input_budget "Code input" "$task"
   run_text_prompt "$model" "$instruction" "$task"
 }
