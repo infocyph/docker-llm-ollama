@@ -927,3 +927,46 @@ Do not replace the Section 16 order. Fold these review additions into it as foll
 6. Add standard `linux/arm64` publication only after a real native runtime/model smoke path exists; keep ROCm separate and architecture-limited to what is actually validated.
 7. Add input-budget protection and benchmark the bundled `ai-commit` prompt before final documentation/release cleanup.
 8. Re-run the full original LocalDevStack compatibility gate unchanged before publishing the next provider release.
+
+---
+
+# 26. Implementation tracker
+
+Last updated: **2026-09-17**
+
+Overall status: **in progress**
+
+| Batch | Scope | Status |
+|---|---|---|
+| Batch 1 | CLI/runtime responsibility cleanup, model resolution, JSON/schema hardening, lightweight CLI regression gates | ✅ Complete |
+| Batch 2 | Compose QoL, Dockerfile/runtime hardening, daemon/model/persistence smoke coverage | ⏭️ Next |
+| Batch 3 | Publication/release safety, stable-source resolution, manifest/digest verification, platform strategy | ⏳ Pending |
+| Batch 4 | README/QoL reconciliation, LocalDevStack interoperability, input-budget/prompt optimization, final sweep | ⏳ Pending |
+
+## Batch 1 — complete
+
+Implementation commit: `5d3ff793e59d5867d4164a72f2be61c3a1a8e470`
+
+- [x] Remove `start`, `stop`, `restart`, `status` and `logs` lifecycle commands.
+- [x] Remove `scripts/lib/docker.sh` and bundled CLI Docker-host lifecycle dependency.
+- [x] Keep the production CLI image-native and fail clearly when the Ollama runtime is unavailable.
+- [x] Centralize model precedence as explicit option -> `LLM_SM_MODEL` -> `OLLAMA_MODEL` -> `qwen2.5:3b`.
+- [x] Apply common model resolution to developer/model-aware commands.
+- [x] Prevent `ollama run` from implicitly pulling a missing model; direct users to `llm-sm pull`.
+- [x] Replace manual generate-payload JSON construction with `jq`.
+- [x] Validate/compact JSON schema locally before API submission.
+- [x] Add a bounded API connect timeout without imposing a total inference timeout.
+- [x] Remove duplicated hard-coded CI version expectations and derive the expected CLI version from its source.
+- [x] Add command-registry/help, lifecycle-removal, model-precedence, JSON-payload and malformed-schema regression gates.
+- [x] Preserve Compose syntax/config validation in lightweight CI.
+
+## Batch 2 — next
+
+Planned focus:
+
+- [ ] Remove fixed `container_name` from standalone/CPU/NVIDIA/AMD Compose definitions while preserving service key `llm-sm`.
+- [ ] Reconcile shared `llm-sm-data` volume behavior and isolated-volume override expectations.
+- [ ] Harden Dockerfile build-time Ollama readiness/model verification and upstream compatibility assumptions.
+- [ ] Add runtime smoke coverage for daemon health, fresh-volume baked model, generate/chat streaming/non-streaming, missing-model behavior and clean SIGTERM.
+- [ ] Add persistence recreation coverage without downloading a second large model.
+- [ ] Add a cheap Dockerfile/build-definition structural gate that does not require the 3B model download on every PR.
