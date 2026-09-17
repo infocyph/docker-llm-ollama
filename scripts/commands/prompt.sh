@@ -44,5 +44,6 @@ command_main() {
   fi
 
   [[ -n "$input" ]] || die "Prompt, piped input, or --file is required"
+  check_input_budget "Prompt input" "$input"
   run_text_prompt "$model" "$system" "$input"
 }
