@@ -447,3 +447,483 @@ Provider integration is ready when:
 6. Validate LocalDevStack Nginx + Tools interoperability.
 7. Reconcile README/examples.
 8. Publish the next provider release only after the LocalDevStack compatibility gate passes.
+
+---
+
+# 17. Additive full-repository review findings
+
+Everything below is additive to Sections 1–16. If an item below ever conflicts with an earlier invariant or hard requirement, Sections 1–16 win.
+
+The planning branch currently changes only this plan file, so the implementation baseline remains the current `main` codebase. The following items come from reviewing that full baseline rather than only the integration draft.
+
+## 17.1 Keep the CLI image-native after lifecycle cleanup
+
+The final production CLI should be conceptually image-native:
+
+- `docker exec ... llm-sm ...` for a manually named standalone container;
+- `docker compose exec llm-sm llm-sm ...` when Compose owns the service;
+- direct `llm-sm ...` from inside another explicitly designed execution context only when the bundled runtime files are actually present.
+
+Do not retain Docker-host control logic merely to preserve historical source-tree convenience.
+
+When removing lifecycle commands:
+
+- remove `start`, `stop`, `restart`, `status` and `logs` modules;
+- remove their help entries and tests;
+- inspect all remaining call sites before deleting `scripts/lib/docker.sh`;
+- move genuinely model-related helpers out of Docker-specific code when still needed;
+- make the final bundled CLI independent of the Docker CLI and Docker socket.
+
+Repository-source invocation can remain a CI/developer convenience, but it must not drive the production architecture.
+
+## 17.2 Unify default-model resolution
+
+All model-consuming commands must use one resolver with this precedence:
+
+```text
+explicit command option
+-> LLM_SM_MODEL
+-> OLLAMA_MODEL
+-> baked fallback (qwen2.5:3b)
+```
+
+The current `json` command has a divergent path and can fall back to `qwen2.5:3b` inside the image instead of honoring `OLLAMA_MODEL`/`LLM_SM_MODEL`.
+
+Plan:
+
+- centralize model resolution in one helper;
+- make `ask`, `chat`, `prompt`, `code`, `review`, `json`, `show`, `unload` and future model-aware commands use it;
+- test each precedence level explicitly;
+- never auto-pull a missing model as a side effect of resolving a default;
+- when the selected model is absent, return an actionable error that points to `llm-sm pull <model>`.
+
+This is especially important because an existing persistent volume can legitimately hide the image-baked model.
+
+## 17.3 Stop hand-building JSON where `jq` is already mandatory
+
+`jq` is already installed as a fixed runtime dependency and is already used by `ai-commit`.
+
+Use it consistently for request payload generation:
+
+- replace hand-written string escaping/payload concatenation where practical with `jq -n` + `--arg` / `--argjson`;
+- validate `json --schema <file>` as valid JSON before sending it;
+- compact schema JSON before embedding it;
+- fail locally with a clear message for malformed schema input;
+- remove `json_quote()` if no call site remains afterward.
+
+Keep generation requests free of a short total request timeout because local inference may legitimately run for a long time. A small connect timeout may be used to fail quickly when the daemon is unavailable.
+
+## 17.4 Bound accidental context explosions
+
+Developer commands can currently feed arbitrary files, piped content and Git diffs into a small local model. This is useful, but accidental multi-megabyte input creates poor latency, memory pressure and low-quality truncation behavior.
+
+Add a common preflight input-budget mechanism for `prompt`, `code`, `review` and `ai-commit`:
+
+- measure input bytes before inference;
+- provide a conservative configurable soft limit;
+- warn clearly when input is unusually large;
+- provide a bounded hard safety limit unless explicitly overridden;
+- never silently truncate repository content or diffs;
+- print enough guidance for the user to narrow files/diffs when rejected.
+
+Prefer byte-based guarding in the shell rather than pretending to perform exact tokenizer accounting for every model.
+
+## 17.5 Benchmark the bundled `ai-commit` prompt
+
+The `ai-commit` prompt is intentionally detailed, but its current size is significant relative to a small 3B model and every invocation pays that context cost.
+
+Before release:
+
+- benchmark current prompt latency and output quality against a reduced equivalent;
+- remove redundant prose or duplicated guidance only where output quality does not regress;
+- preserve the required Conventional Commit + Gitmoji contract;
+- do not remove rules merely to reduce file size;
+- keep the prompt bundled and versioned with the image.
+
+Treat this as a performance/QoL optimization, not as a functional rewrite.
+
+---
+
+# 18. Compose and developer-experience hardening
+
+## 18.1 Remove fixed `container_name` from Compose files
+
+The Compose service name already provides stable Docker DNS as `llm-sm`.
+
+Hard-coding:
+
+```yaml
+container_name: llm-sm
+```
+
+is unnecessary and prevents multiple independent Compose projects from running the service concurrently.
+
+Plan:
+
+- remove `container_name` from `compose.yml` and all `examples/compose/*.yml` files;
+- keep the service key exactly `llm-sm` so the internal endpoint remains `http://llm-sm:11434`;
+- update Compose-oriented documentation to prefer `docker compose exec llm-sm ...`;
+- keep `--name llm-sm` only in explicit standalone `docker run` examples where the user intentionally owns that global name.
+
+This must not alter the LocalDevStack service identity or internal endpoint contract.
+
+## 18.2 Make shared-volume behavior explicit
+
+The explicit named-volume contract remains:
+
+```text
+llm-sm-data
+```
+
+with `LLM_SM_VOLUME` override.
+
+Because the volume has an explicit global name, separate Compose projects using the default will intentionally share the same model store.
+
+Document that clearly:
+
+- default = reusable shared local model cache/store;
+- isolated stack = set a distinct `LLM_SM_VOLUME`;
+- never silently namespace or rename the existing default volume because persistence is a hard contract.
+
+## 18.3 Expose useful upstream tuning without changing defaults
+
+Keep the current conservative defaults for small local systems:
+
+```text
+OLLAMA_NUM_PARALLEL=1
+OLLAMA_MAX_LOADED_MODELS=1
+OLLAMA_KEEP_ALIVE=5m
+```
+
+Do not raise them automatically.
+
+Document optional pass-through tuning only where useful, including current upstream knobs such as:
+
+```text
+OLLAMA_CONTEXT_LENGTH
+OLLAMA_MAX_QUEUE
+OLLAMA_LOAD_TIMEOUT
+OLLAMA_ORIGINS
+```
+
+Rules:
+
+- do not set these merely because upstream supports them;
+- explain that parallelism/context increases RAM/VRAM requirements;
+- never use a wildcard CORS origin by default;
+- expose an environment variable in examples only when there is a real LocalDevStack/user need.
+
+## 18.4 Proxy/certificate QoL
+
+For environments that need outbound proxying during model pulls:
+
+- document `HTTPS_PROXY` support;
+- do not set `HTTP_PROXY` by default because it can interfere with normal Ollama client/server communication;
+- document custom CA injection only as an advanced deployment concern;
+- keep proxy credentials and certificates outside the image/repository.
+
+---
+
+# 19. Platform and GPU publication strategy
+
+## 19.1 Add standard-image multi-arch support deliberately
+
+The upstream standard Ollama image currently provides both `linux/amd64` and `linux/arm64`, while the ROCm image remains a separate AMD-oriented `linux/amd64` path.
+
+The current workflow does not specify `platforms`, so publication effectively follows the GitHub runner architecture.
+
+Plan for the standard tag family:
+
+```text
+linux/amd64
+linux/arm64
+```
+
+but only advertise/publish both after the complete model-bake and runtime smoke contract passes on each architecture.
+
+Important constraints:
+
+- do not make slow/emulated Ollama inference under QEMU the permanent release strategy merely to claim multi-arch;
+- prefer native architecture builders/runners where feasible;
+- if a reliable build-only cross-architecture approach is used, separately prove that the resulting arm64 runtime starts and serves the baked model natively;
+- keep a manifest gate that verifies the advertised standard platforms.
+
+If arm64 cannot yet satisfy the full release gate, publish only the proven architecture and do not claim arm64 support prematurely.
+
+## 19.2 Keep ROCm architecture separate
+
+Preserve the hard variant split:
+
+```text
+standard: latest / <release>
+ROCm:     amd-latest / amd-<release>
+```
+
+Do not merge ROCm into the standard manifest.
+
+Until upstream support and real runners prove otherwise:
+
+- treat the ROCm tag family as `linux/amd64`;
+- validate `/dev/kfd` + `/dev/dri` guidance against current upstream requirements;
+- do not claim ROCm runtime validation from a CPU-only CI runner.
+
+## 19.3 Do not silently broaden GPU claims
+
+Upstream capabilities may evolve independently of this project. New Vulkan, Jetson or other acceleration paths should be treated as separate compatibility work:
+
+- no automatic support claim merely because the upstream base contains code for it;
+- add a documented runtime path only after a real smoke test and maintenance contract exist;
+- keep CPU/NVIDIA standard + AMD ROCm as the supported baseline for this plan.
+
+---
+
+# 20. Moving-upstream-base hardening
+
+The hard plan intentionally keeps moving upstream bases:
+
+```text
+ollama/ollama:latest
+ollama/ollama:rocm
+```
+
+That gives users current Ollama improvements, but it also makes upstream drift part of the release risk.
+
+Add compensating controls rather than pinning away the requirement.
+
+## 20.1 Preflight upstream compatibility
+
+Before a release/scheduled rebuild is accepted, prove that the selected upstream base still provides the assumptions used here:
+
+- `/bin/ollama` exists and executes;
+- expected package-management path still supports the minimal CLI dependencies, or installation logic is adjusted deliberately;
+- `/root/.ollama` remains the expected model store for this image contract;
+- `ollama serve`, `ollama list`, `ollama pull` and `ollama show` work as expected;
+- healthcheck command remains valid.
+
+Do not add an OS-wide package upgrade step.
+
+## 20.2 Record resolved build identity
+
+For every published variant, record in the workflow summary and/or OCI metadata where practical:
+
+- target platform;
+- resolved upstream base digest;
+- `ollama --version`;
+- configured default model reference;
+- baked model metadata/digest available from Ollama;
+- resulting published image digest.
+
+This makes a moving-base rebuild auditable without changing the moving-base policy.
+
+## 20.3 Separate daemon health from model completeness
+
+Keep the container healthcheck focused on daemon readiness.
+
+Do not make health depend on the baked default model because an existing populated volume can legitimately replace the image's baked `/root/.ollama` state.
+
+Instead:
+
+- release/runtime smoke should separately verify the baked model on a fresh volume;
+- healthcheck should prove the Ollama daemon responds;
+- `llm-sm` commands should give a useful missing-model error when a user-managed volume lacks the requested model.
+
+## 20.4 Bound expensive build stages
+
+The model-bearing build is intentionally large and network-sensitive.
+
+Add:
+
+- workflow/job timeout bounds;
+- bounded daemon-start readiness as already planned;
+- useful build-log output when model pull fails;
+- no duplicate model download inside the same CI path when avoidable;
+- cache usage that does not accidentally turn an immutable release into stale/unverified model state.
+
+---
+
+# 21. CLI/version contract and lightweight regression tests
+
+## 21.1 Eliminate duplicated version literals
+
+The repository currently carries CLI version expectations in more than one place.
+
+Move toward one authoritative version source for the bundled CLI and make CI derive its assertion from that source.
+
+Requirements:
+
+- `llm-sm version` must remain cheap and deterministic;
+- CI must not hard-code the same version separately in multiple commands;
+- publication should record the bundled CLI version;
+- define release-tag-to-CLI-version validation deliberately rather than assuming historical release `0.01` already follows the newer CLI numbering scheme.
+
+Do not rewrite existing release history simply to normalize version syntax.
+
+## 21.2 Add shell-level behavior tests
+
+Without downloading a model, lightweight CI should prove at least:
+
+- every public command has a valid module;
+- help and command registry agree;
+- removed lifecycle commands cannot reappear unnoticed;
+- default-model precedence is correct;
+- malformed JSON schema is rejected locally;
+- valid schema payload construction is valid JSON;
+- aliases (`list`, `remove`, help/version flags) still resolve correctly;
+- no production command requires a Docker socket;
+- Compose files contain no fixed `container_name` after cleanup.
+
+Use small fixture/stub scripts where needed rather than pulling Ollama/model weights into every PR check.
+
+## 21.3 Add a Dockerfile/BuildKit structural gate
+
+PR CI should perform a cheap Dockerfile/build-definition validation before the expensive release build.
+
+The gate should catch:
+
+- missing copied CLI paths;
+- syntax/build-definition errors;
+- accidental extra exposed ports;
+- broken variant build arguments;
+- accidental loss of healthcheck or expected entrypoint contract.
+
+Avoid requiring the full 3B model download for this lightweight gate.
+
+---
+
+# 22. Release workflow safety and recovery
+
+## 22.1 Add a safe manual recovery path
+
+Add `workflow_dispatch` to the publication workflow so a failed scheduled/moving-tag refresh can be retried deliberately.
+
+The manual path must be conservative:
+
+- default to rebuilding/verifying moving tags from a selected stable release source;
+- require an explicit input/condition before attempting an immutable release tag;
+- run the same immutable-tag guard as release publication;
+- never make a manual rerun a bypass around release safety checks.
+
+## 22.2 Make scheduled source selection explicitly stable
+
+The weekly refresh should resolve the latest **published stable** release intentionally.
+
+Do not rely on a generic release-list ordering that could later select a prerelease if prereleases are introduced.
+
+Add a regression check or explicit filtering logic for this contract.
+
+## 22.3 Define prerelease tag behavior before one exists
+
+If GitHub prereleases are used later:
+
+- a prerelease may publish its explicit immutable prerelease tag only when deliberately supported;
+- it must not move the stable `latest` / `amd-latest` tags unless the workflow explicitly opts into that policy;
+- scheduled refresh continues from the latest stable published release.
+
+## 22.4 Verify the pushed digest, not only the workflow exit code
+
+After push:
+
+- verify Docker Hub and GHCR resolve the expected tag/digest;
+- verify standard/ROCm manifests expose only expected platforms;
+- smoke-test a published candidate by digest where practical before considering publication complete;
+- keep provenance/attestation attached to the actual digest;
+- add SBOM attestation/publication where practical without blocking the core runtime on tooling fragility.
+
+## 22.5 Keep current action majors current
+
+The workflow already uses the current major lines for the main checkout/Docker/attestation actions at plan-review time.
+
+Preserve the policy:
+
+- use the newest compatible major versions;
+- never downgrade merely for consistency with older LocalDevStack repositories;
+- treat action-major updates as normal maintenance with CI validation.
+
+---
+
+# 23. Security and operational QoL additions
+
+## 23.1 Keep CORS explicit
+
+Do not enable broad browser access by default.
+
+If a concrete browser client needs direct Ollama access:
+
+- use explicit `OLLAMA_ORIGINS` values;
+- prefer the LocalDevStack Nginx route and its policy controls;
+- never use `*` merely to make development convenient without reviewing the exposure.
+
+## 23.2 Keep authentication outside this provider image
+
+The local Ollama API itself is not where this project should invent an authentication layer.
+
+For LocalDevStack:
+
+- bind standalone examples to localhost;
+- use the internal Docker network for service-to-service traffic;
+- let Nginx/LocalDevStack own any user-facing exposure policy;
+- never publish `11434` broadly by default.
+
+## 23.3 Prefer read-only repository mounts
+
+Documentation should recommend read-only workspace mounts for analysis-only commands:
+
+```text
+review
+code inspection
+prompt/file context
+```
+
+Use writable mounts only for commands that intentionally mutate the repository, such as `ai-commit --yes` / `--edit`.
+
+## 23.4 Keep operational logs in the orchestrator
+
+After lifecycle command removal, document the canonical observability path:
+
+```bash
+docker compose ps
+docker compose logs -f llm-sm
+docker compose exec llm-sm llm-sm version
+```
+
+The provider CLI should expose model/API functionality; container state/log ownership remains outside it.
+
+---
+
+# 24. Extended acceptance gates
+
+In addition to Section 15, the repository-wide hardening is complete when:
+
+1. no Compose example hard-codes `container_name`;
+2. multiple Compose projects can run concurrently when host ports/volume names are intentionally separated;
+3. the stable Docker DNS service name remains `llm-sm`;
+4. all model-aware CLI commands honor the same explicit/env/fallback precedence;
+5. `json` no longer silently ignores the configured default model inside the image;
+6. request JSON/schema handling is validated and no fragile hand-built payload path remains where `jq` should be used;
+7. large prompt/file/diff input has an explicit, documented guard and is never silently truncated;
+8. lifecycle modules and Docker-host lifecycle helpers are absent from the final production command surface;
+9. CLI version CI assertions come from one authoritative source;
+10. standard multi-arch publication is advertised only for architectures that pass the full model/runtime gate;
+11. ROCm remains a separate `amd-*` family and advertises only validated platforms;
+12. weekly refresh selects the latest stable published release explicitly;
+13. manual publication recovery cannot bypass immutable-tag protection;
+14. both registries are verified after push against the expected digest/manifest;
+15. moving upstream Ollama base/version/model metadata is recorded for each publication;
+16. daemon health remains independent from user-persistent model contents;
+17. README examples clearly separate standalone `docker run` naming from Compose service execution;
+18. LocalDevStack continues to work with `llm-sm` absent and never requires host port `11434` for internal AI traffic.
+
+---
+
+# 25. Additive implementation sequence
+
+Do not replace the Section 16 order. Fold these review additions into it as follows:
+
+1. During lifecycle cleanup, centralize model resolution and remove the production dependency on Docker-host helpers.
+2. During lightweight CI expansion, add command/help/version/model-precedence/schema/Compose regression checks.
+3. During Compose reconciliation, remove fixed `container_name`, switch Compose docs to `docker compose exec`, and document shared-vs-isolated volume behavior.
+4. During runtime smoke work, separately validate daemon health, fresh-volume baked-model presence, missing-model behavior, streaming and persistence.
+5. During Docker/publication hardening, add upstream-base identity recording, stable-release selection, manual recovery, immutable-tag protection and post-push digest verification.
+6. Add standard `linux/arm64` publication only after a real native runtime/model smoke path exists; keep ROCm separate and architecture-limited to what is actually validated.
+7. Add input-budget protection and benchmark the bundled `ai-commit` prompt before final documentation/release cleanup.
+8. Re-run the full original LocalDevStack compatibility gate unchanged before publishing the next provider release.
