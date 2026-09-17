@@ -6,6 +6,7 @@ attachment_kind() {
 
   case "$lower" in
     *.png|*.jpg|*.jpeg|*.webp) printf '%s\n' image ;;
+    *.gif|*.bmp|*.tif|*.tiff|*.svg) printf '%s\n' unsupported-image ;;
     *.pdf) printf '%s\n' pdf ;;
     *) printf '%s\n' text ;;
   esac
@@ -13,11 +14,19 @@ attachment_kind() {
 
 validate_image_file() {
   local file="$1"
+  local lower="${file,,}"
+
   [[ -f "$file" ]] || die "Image file not found: $file"
   [[ -s "$file" ]] || die "Image file is empty: $file"
+
+  case "$lower" in
+    *.png|*.jpg|*.jpeg|*.webp) ;;
+    *) die "Unsupported image format: $file. Use PNG, JPEG, or WebP for Ollama vision input." ;;
+  esac
 }
 
 pdf_text_context() {
+  (( $# > 0 )) || return 0
   require_command pdftotext
 
   local file text first=1
