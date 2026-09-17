@@ -65,6 +65,28 @@ jobs:
           fi
           grep -q 'Schema file is not valid JSON' /tmp/llm-sm-json.err
 
+      - name: Validate input budget contracts
+        run: |
+          core="$PWD/scripts/lib/core.sh"
+
+          LLM_SM_INPUT_WARN_BYTES=4 LLM_SM_INPUT_MAX_BYTES=8 \
+            bash -c 'source "$1"; check_input_budget test 1234' _ "$core"
+
+          if LLM_SM_INPUT_WARN_BYTES=4 LLM_SM_INPUT_MAX_BYTES=8 \
+              bash -c 'source "$1"; check_input_budget test 123456789' _ "$core"; then
+            echo 'Oversized input unexpectedly passed.' >&2
+            exit 1
+          fi
+
+          LLM_SM_INPUT_WARN_BYTES=4 LLM_SM_INPUT_MAX_BYTES=8 LLM_SM_ALLOW_LARGE_INPUT=1 \
+            bash -c 'source "$1"; check_input_budget test 123456789' _ "$core"
+
+          if LLM_SM_INPUT_WARN_BYTES=9 LLM_SM_INPUT_MAX_BYTES=8 \
+              bash -c 'source "$1"; check_input_budget test 1' _ "$core"; then
+            echo 'Invalid input-limit configuration unexpectedly passed.' >&2
+            exit 1
+          fi
+
       - name: Validate Compose contracts
         run: |
           for file in \
@@ -84,6 +106,28 @@ jobs:
           docker compose -f compose.yml config --volumes | grep -qx llm-sm-data
           LLM_SM_VOLUME=llm-sm-isolated docker compose -f compose.yml config \
             | grep -q 'name: llm-sm-isolated'
+
+          workspace_json="$(LLM_SM_WORKSPACE="$PWD" docker compose -f compose.yml -f compose.workspace.yml config --format json)"
+          jq -e '.services["llm-sm"].working_dir == "/workspace"' <<< "$workspace_json" >/dev/null
+          jq -e '.services["llm-sm"].volumes | any(.target == "/workspace" and .read_only == true)' <<< "$workspace_json" >/dev/null
+          jq -e '.services["llm-sm"].volumes | any(.target == "/root/.ollama")' <<< "$workspace_json" >/dev/null
+
+          workspace_rw_json="$(LLM_SM_WORKSPACE="$PWD" LLM_SM_WORKSPACE_MODE=rw docker compose -f compose.yml -f compose.workspace.yml config --format json)"
+          jq -e '.services["llm-sm"].volumes | any(.target == "/workspace" and ((.read_only // false) == false))' <<< "$workspace_rw_json" >/dev/null
+
+      - name: Validate publication policy
+        run: |
+          grep -Fq 'workflow_dispatch:' .github/workflows/docker.publish.yml
+          grep -Fq 'releases/latest' .github/workflows/docker.publish.yml
+          grep -Fq 'publish_immutable' .github/workflows/docker.publish.yml
+          grep -Fq 'Refusing to overwrite immutable release tag' .github/workflows/docker.publish.yml
+          grep -Fq 'provenance: mode=max' .github/workflows/docker.publish.yml
+          grep -Fq 'sbom: true' .github/workflows/docker.publish.yml
+          grep -Fq 'platforms: linux/amd64' .github/workflows/docker.publish.yml
+          if grep -Fq 'platforms: linux/amd64,linux/arm64' .github/workflows/docker.publish.yml; then
+            echo 'arm64 publication must not be enabled before a native runtime gate exists.' >&2
+            exit 1
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
