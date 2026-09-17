@@ -59,5 +59,6 @@ command_main() {
     context="Review focus: $focus"$'\n\n'"$context"
   fi
 
+  check_input_budget "Review input" "$context"
   run_text_prompt "$model" "$instruction" "$context"
 }
