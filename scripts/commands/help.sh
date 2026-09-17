@@ -53,6 +53,9 @@ ${BOLD}Environment:${RESET}
   OLLAMA_MODEL                          Image/runtime default model
   LLM_SM_SYSTEM                         Default system text for prompt
   LLM_SM_AI_COMMIT_PROMPT_FILE          Override bundled ai-commit prompt file
+  LLM_SM_INPUT_WARN_BYTES               Warn above this input size (default: 65536)
+  LLM_SM_INPUT_MAX_BYTES                Reject above this input size (default: 262144)
+  LLM_SM_ALLOW_LARGE_INPUT=1            Explicitly bypass the hard input-size guard
   NO_COLOR                              Disable colored output
 
 ${BOLD}Examples:${RESET}
