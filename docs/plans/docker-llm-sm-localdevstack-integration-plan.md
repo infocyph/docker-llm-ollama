@@ -1041,3 +1041,122 @@ Current dependency observation at this tracker update:
 - docker-tools `main` does not yet expose an `llm-sm` provider contract.
 
 Therefore the provider repository itself is ready for PR/final CI, while Section 14 remains the deliberate release blocker until the downstream stack integration is completed.
+
+---
+
+# 27. Batch 5 — large and multimodal request extension
+
+Status: **✅ Complete**
+
+This section records an explicit user-approved extension after the original hardening batches. Where it conflicts with the earlier input-size assumption, this section wins because the requirement was deliberately changed after Batch 4.
+
+Effective tracker extension:
+
+| Batch | Scope | Status |
+|---|---|---|
+| Batch 5 | Large text/diff requests, image input, PDF input, payload-size hardening | ✅ Complete |
+
+Primary implementation commit: `8cbfd40e27c3fcd0c730bb0ae001c86d343a98b6`
+
+Runtime dependency smoke commit: `732486067f37c5a51565a01dae373f7310dd191a`
+
+Documentation commit: `0eeb8cab96dd2f07cd52bc750ebfcd31f0a9ee22`
+
+## 27.1 Large text and diff policy
+
+The previous Batch 4 default hard ceiling is superseded.
+
+New default behavior:
+
+```text
+LLM_SM_INPUT_WARN_BYTES=1048576
+LLM_SM_INPUT_MAX_BYTES=0
+```
+
+Rules:
+
+- large text, files and Git diffs are accepted by default;
+- `0` means no CLI hard ceiling;
+- large requests warn rather than fail by default;
+- a deployment may set a non-zero `LLM_SM_INPUT_MAX_BYTES` when it deliberately wants a local policy ceiling;
+- `LLM_SM_ALLOW_LARGE_INPUT=1` remains an explicit bypass only for a configured non-zero ceiling;
+- `llm-sm` never silently truncates user input;
+- actual useful size is still constrained by the selected model context, Ollama/runtime memory and host RAM/VRAM.
+
+Payload construction must not reintroduce the operating-system command-line-size limit. Large chat/generate requests therefore use temporary files plus `jq --rawfile` / file-backed `curl` bodies instead of placing the complete prompt in an external-process argv.
+
+## 27.2 Image input
+
+Ollama-native image input is supported through `/api/chat` message `images` data.
+
+CLI contract:
+
+```text
+llm-sm prompt --image <path> ...
+llm-sm prompt --attach <image-path> ...
+```
+
+Rules:
+
+- multiple images may be attached to one request;
+- image bytes are base64 encoded for the REST request;
+- the selected model is checked through `/api/show` and must expose `vision` capability;
+- the provider never silently switches models;
+- the provider never auto-pulls a vision model;
+- the baked `qwen2.5:3b` remains the lightweight default text model;
+- users may explicitly pull/select a vision model such as `qwen2.5vl:3b` when image input is needed.
+
+## 27.3 PDF input
+
+PDF support is intentionally split into two explicit modes.
+
+Text-oriented PDF path:
+
+```text
+llm-sm prompt --pdf <path> ...
+llm-sm prompt --attach <pdf-path> ...
+```
+
+Behavior:
+
+- extract text locally with `pdftotext`;
+- preserve the normal text-model path;
+- fail clearly when a PDF has no extractable text instead of silently sending empty content.
+
+Visual/scanned PDF path:
+
+```text
+llm-sm prompt --pdf-vision <path> -m <vision-model> ...
+```
+
+Behavior:
+
+- render PDF pages to images with `pdftoppm`;
+- attach rendered pages through the same Ollama-native image path;
+- require a vision-capable model;
+- use configurable `LLM_SM_PDF_DPI` with default `120`.
+
+`poppler-utils` is therefore an approved fixed runtime dependency for the attachment feature. This explicitly supersedes the earlier Section 5 package list where that list would otherwise exclude PDF tooling.
+
+## 27.4 Attachment QoL
+
+`llm-sm prompt --attach <path>` provides extension-based convenience routing:
+
+- common image extensions -> image input;
+- `.pdf` -> PDF text extraction;
+- other files -> text context.
+
+Explicit `--image`, `--pdf` and `--pdf-vision` remain available when the caller wants deterministic behavior rather than auto-detection.
+
+## 27.5 Validation
+
+Completed validation includes:
+
+- Bash syntax validation for the new attachment/input helpers;
+- local PDF text extraction smoke;
+- local multi-page PDF rendering smoke;
+- base64 image-array payload construction smoke;
+- runtime image smoke now requires both `pdftotext` and `pdftoppm` to exist in the published candidate;
+- existing Docker-DNS, native API, OpenAI-compatible API, persistence and shutdown gates remain unchanged.
+
+The release compatibility blockers from Section 26 remain in force. Batch 5 completes the provider-side large/multimodal request implementation; it does not waive the still-open LocalDevStack/docker-tools/real-runtime release gates.
