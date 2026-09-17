@@ -7,43 +7,27 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Runtime: Ollama](https://img.shields.io/badge/Runtime-Ollama-black.svg)](https://ollama.com)
 
-A self-contained small local LLM runtime powered by Ollama.
+`docker-llm-sm` is a small local Ollama provider/runtime with a bundled developer CLI and a baked default model.
 
-The published image bakes `qwen2.5:3b` into the image so the service can start immediately without a first-run model download. The `llm-sm` CLI, command modules, and bundled prompts are also part of every published image. Users do not install or remove the CLI separately; models are the mutable part of the runtime.
+The image is intentionally provider-focused. It owns Ollama, model state, model-facing CLI commands and the local API. Container lifecycle, Nginx routing and higher-level AI features belong to Docker/Compose/LocalDevStack consumers.
+
+## Runtime contract
+
+| Item | Contract |
+|---|---|
+| Default model | `qwen2.5:3b` |
+| Ollama API | `11434` inside the container |
+| Model store | `/root/.ollama` |
+| Default persistent volume | `llm-sm-data` |
+| Standard image | CPU / NVIDIA |
+| AMD image | separate ROCm `amd-*` tags |
+| Runtime privacy | `OLLAMA_NO_CLOUD=1` |
+| LocalDevStack internal URL | `http://llm-sm:11434` |
+| LocalDevStack user URL | `https://llm.localhost` |
+
+The standard image uses `ollama/ollama:latest`. The AMD image uses `ollama/ollama:rocm`. Publication resolves those moving upstream tags to a digest once per publish run so candidate validation and final publication use the same upstream bits.
 
 ## Published images
-
-Consumers use published images only. Local image builds are not part of the supported usage flow.
-
-| Registry | Repository |
-|---|---|
-| Docker Hub | `docker.io/infocyph/llm-sm` |
-| GitHub Container Registry | `ghcr.io/infocyph/llm-sm` |
-
-Two runtime variants are published through tags:
-
-| Runtime | Moving tag | Release tag example |
-|---|---|---|
-| CPU / NVIDIA | `latest` | `v1.0.0` |
-| AMD ROCm | `amd-latest` | `amd-v1.0.0` |
-
-For reproducible deployments, pin a release tag rather than a moving tag.
-
-## Defaults
-
-| Setting | Default |
-|---|---|
-| Model | `qwen2.5:3b` |
-| Persistent model volume | `llm-sm-data` |
-| API port | `11434` |
-| Parallel requests | `1` |
-| Loaded models | `1` |
-| Keep alive | `5m` |
-| Ollama cloud features | disabled |
-
-`OLLAMA_NUM_PARALLEL=1` is intentionally conservative for local machines. Increase it only when the host has sufficient RAM/VRAM.
-
-## Pull
 
 Docker Hub:
 
@@ -59,149 +43,109 @@ docker pull ghcr.io/infocyph/llm-sm:latest
 docker pull ghcr.io/infocyph/llm-sm:amd-latest
 ```
 
-Pinned release:
+Release tags are immutable. Moving `latest` / `amd-latest` tags are refreshed from the latest published stable GitHub release.
 
-```bash
-docker pull infocyph/llm-sm:v1.0.0
-docker pull infocyph/llm-sm:amd-v1.0.0
-```
+Current publication remains `linux/amd64`. Standard `linux/arm64` will be published only after a native arm64 model/runtime gate exists; it is not claimed prematurely.
 
-## Persistent model state
-
-`/root/.ollama` is mounted from the named Docker volume `llm-sm-data` by default. This keeps user-managed model state independent from the container lifecycle.
-
-On first use, Docker creates the empty named volume and initializes it from the baked `/root/.ollama` contents in the image. The baked default model is therefore available immediately while the volume becomes the persistent model store afterward.
-
-Models pulled or removed through `llm-sm` survive:
-
-- container restart
-- container stop/start
-- `docker compose down` followed by `up`
-- container recreation
-- replacing the container with a newer image while reusing the same volume
-
-The model store is removed only when the volume itself is explicitly removed, for example with `docker compose down -v` or `docker volume rm llm-sm-data`.
-
-Use a different persistent model store by changing `LLM_SM_VOLUME`:
-
-```bash
-LLM_SM_VOLUME=my-models docker compose up -d
-```
-
-## Run
-
-### CPU
-
-```bash
-docker run -d \
-  --name llm-sm \
-  --restart unless-stopped \
-  -p 127.0.0.1:11434:11434 \
-  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
-  infocyph/llm-sm:latest
-```
-
-### NVIDIA GPU
-
-```bash
-docker run -d \
-  --name llm-sm \
-  --restart unless-stopped \
-  --gpus=all \
-  -p 127.0.0.1:11434:11434 \
-  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
-  infocyph/llm-sm:latest
-```
-
-### AMD GPU
-
-```bash
-docker run -d \
-  --name llm-sm \
-  --restart unless-stopped \
-  --device=/dev/kfd \
-  --device=/dev/dri \
-  -p 127.0.0.1:11434:11434 \
-  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
-  infocyph/llm-sm:amd-latest
-```
-
-AMD GPU support targets Linux hosts supported by Ollama/ROCm. If device permissions prevent GPU discovery, inspect the host permissions/group IDs for `/dev/kfd` and `/dev/dri` and add the required groups to the container.
-
-To use GHCR, replace `infocyph/llm-sm:<tag>` with `ghcr.io/infocyph/llm-sm:<tag>`.
-
-The API is bound to localhost in these examples. Expose it to another interface only when explicitly required and protected appropriately.
-
-## Repository-aware container
-
-Commands such as `ai-commit`, file review, and code generation can work directly against a host repository by mounting that repository into the normal long-running `llm-sm` container.
-
-From the project root:
-
-```bash
-docker run -d \
-  --name llm-sm \
-  --restart unless-stopped \
-  -p 127.0.0.1:11434:11434 \
-  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
-  -v "$PWD:/workspace" \
-  -w /workspace \
-  infocyph/llm-sm:latest
-```
-
-For NVIDIA, add `--gpus=all`; for AMD use the `amd-*` image plus `/dev/kfd` and `/dev/dri` device mappings.
-
-The workspace mount is a Docker runtime concern; the image does not manage or discover host directories itself. Docker cannot add a new bind mount to an already-created container, so mount the repository or a broader workspace directory when the container is created if repo-aware commands are needed.
-
-Once mounted, keep using the same running container:
-
-```bash
-docker exec -it llm-sm llm-sm ai-commit
-docker exec -it llm-sm llm-sm review src/Service.php
-docker exec -it llm-sm llm-sm code -f src/HotPath.php "Optimize without changing behavior"
-```
-
-For read-only analysis, the repository can be mounted read-only:
-
-```bash
--v "$PWD:/workspace:ro"
-```
-
-`ai-commit --yes` / `--edit` require a writable repository mount because Git must update repository state. If the container was created without a repository mount, use the stdin-diff fallback described below.
-
-## Docker Compose
-
-The default `compose.yml` consumes the published CPU/NVIDIA image and persists `/root/.ollama`:
-
-```yaml
-services:
-  llm-sm:
-    image: ${LLM_SM_IMAGE:-infocyph/llm-sm:latest}
-    container_name: llm-sm
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
-    volumes:
-      - llm-sm-data:/root/.ollama
-    environment:
-      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
-      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
-      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
-      OLLAMA_NO_CLOUD: ${OLLAMA_NO_CLOUD:-1}
-
-volumes:
-  llm-sm-data:
-    name: ${LLM_SM_VOLUME:-llm-sm-data}
-```
-
-Run it with:
+## Quick start with Docker Compose
 
 ```bash
 docker compose pull
 docker compose up -d
 ```
 
-Ready-to-run examples are provided for each runtime:
+The default Compose service key is `llm-sm`, so Docker-network consumers can use:
+
+```text
+http://llm-sm:11434
+```
+
+The standalone Compose example binds the API only to localhost:
+
+```text
+127.0.0.1:11434
+```
+
+Useful lifecycle commands:
+
+```bash
+docker compose ps
+docker compose logs -f llm-sm
+docker compose restart llm-sm
+docker compose down
+```
+
+Container lifecycle is intentionally not exposed through the `llm-sm` CLI.
+
+## Persistent model state
+
+The default Compose volume is:
+
+```text
+llm-sm-data -> /root/.ollama
+```
+
+A fresh empty Docker volume is populated from the image-baked model store, so `qwen2.5:3b` is available without a first-start model download.
+
+User-pulled models survive container recreation and image replacement while the same volume is retained.
+
+Use another model store when isolation is required:
+
+```bash
+LLM_SM_VOLUME=my-project-models docker compose up -d
+```
+
+The default `llm-sm-data` name is intentionally shared. Separate Compose projects using that default therefore reuse the same local model store. Set a distinct `LLM_SM_VOLUME` when projects must not share model state.
+
+An existing populated volume is authoritative and hides the model store baked into a newer image. Upgrades never silently mutate that persistent store. If the requested model is absent, `llm-sm` returns an actionable error and the user can explicitly pull it.
+
+## Optional Compose workspace mount
+
+Repository-aware commands can use an optional Compose override rather than rebuilding the image:
+
+```bash
+LLM_SM_WORKSPACE="$PWD" \
+  docker compose -f compose.yml -f compose.workspace.yml up -d
+```
+
+`compose.workspace.yml` mounts the workspace at `/workspace` and sets that as the working directory.
+
+The mount is **read-only by default**:
+
+```text
+LLM_SM_WORKSPACE_MODE=ro
+```
+
+That is the recommended mode for analysis-only work:
+
+```bash
+docker compose -f compose.yml -f compose.workspace.yml \
+  exec llm-sm llm-sm review src/Service.php
+
+docker compose -f compose.yml -f compose.workspace.yml \
+  exec llm-sm llm-sm code -f src/HotPath.php "Optimize without changing behavior"
+
+docker compose -f compose.yml -f compose.workspace.yml \
+  exec llm-sm llm-sm ai-commit --print
+```
+
+For commands that intentionally mutate Git state, opt into a writable workspace:
+
+```bash
+LLM_SM_WORKSPACE="$PWD" LLM_SM_WORKSPACE_MODE=rw \
+  docker compose -f compose.yml -f compose.workspace.yml up -d
+
+docker compose -f compose.yml -f compose.workspace.yml \
+  exec llm-sm llm-sm ai-commit --yes
+```
+
+The workspace mount is optional and independent from the persistent `/root/.ollama` model volume. The image never scans or mounts host repositories automatically.
+
+When combining `compose.workspace.yml` with files under `examples/compose/`, set `LLM_SM_WORKSPACE` to an absolute path such as `$PWD` so the intended repository is mounted.
+
+## Runtime variants
+
+Ready-to-run Compose files are provided under `examples/compose/`:
 
 ```text
 examples/compose/
@@ -213,206 +157,142 @@ examples/compose/
 CPU:
 
 ```bash
-docker compose -f examples/compose/cpu.yml pull
 docker compose -f examples/compose/cpu.yml up -d
 ```
 
 NVIDIA:
 
 ```bash
-docker compose -f examples/compose/nvidia.yml pull
 docker compose -f examples/compose/nvidia.yml up -d
 ```
 
-AMD:
+AMD ROCm:
 
 ```bash
-docker compose -f examples/compose/amd.yml pull
 docker compose -f examples/compose/amd.yml up -d
 ```
 
-For GHCR or pinned versions, override the image without editing the YAML:
+The NVIDIA path uses the standard image. The AMD path uses `amd-latest` and exposes `/dev/kfd` plus `/dev/dri` as required by the ROCm runtime.
+
+## Standalone `docker run`
+
+CPU:
 
 ```bash
-LLM_SM_IMAGE=ghcr.io/infocyph/llm-sm:v1.0.0 \
-  docker compose -f examples/compose/nvidia.yml up -d
-
-LLM_SM_AMD_IMAGE=ghcr.io/infocyph/llm-sm:amd-v1.0.0 \
-  docker compose -f examples/compose/amd.yml up -d
+docker run -d \
+  --name llm-sm \
+  --restart unless-stopped \
+  -p 127.0.0.1:11434:11434 \
+  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
+  infocyph/llm-sm:latest
 ```
 
-A repository/workspace mount can be added while keeping the model volume:
+NVIDIA adds:
 
-```yaml
-services:
-  llm-sm:
-    volumes:
-      - llm-sm-data:/root/.ollama
-      - .:/workspace
-    working_dir: /workspace
-
-volumes:
-  llm-sm-data:
-    name: ${LLM_SM_VOLUME:-llm-sm-data}
+```text
+--gpus=all
 ```
+
+AMD uses `infocyph/llm-sm:amd-latest` plus:
+
+```text
+--device=/dev/kfd
+--device=/dev/dri
+```
+
+For a standalone repository-aware container, add a bind mount and working directory when creating it:
+
+```bash
+docker run -d \
+  --name llm-sm \
+  --restart unless-stopped \
+  -p 127.0.0.1:11434:11434 \
+  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
+  --mount type=bind,src="$PWD",dst=/workspace,readonly \
+  -w /workspace \
+  infocyph/llm-sm:latest
+```
+
+The explicit `--name llm-sm` is appropriate for this standalone `docker run` flow. Compose intentionally does not set `container_name`.
 
 ## Bundled `llm-sm` CLI
 
-`llm-sm` is part of every published image. There is no CLI install/uninstall command and no user-selectable module directory. The executable and all modules/prompts are versioned together with the image.
+The CLI is fixed image content. Models remain mutable persistent runtime state.
 
-Published layout:
+Main command groups:
 
 ```text
-/usr/local/bin/llm-sm
-/usr/local/lib/llm-sm/
-├── commands/
-├── lib/
-└── prompts/
+Developer: ask, chat, prompt, code, review, json, ai-commit
+Model:     models, ps, run, show, pull, rm, unload
+Low level: ollama, api, version
 ```
 
-Use it through the running container:
+With Compose:
 
 ```bash
-docker exec -it llm-sm llm-sm help
-docker exec -it llm-sm llm-sm version
-docker exec -it llm-sm llm-sm ask "Explain dependency injection briefly"
+docker compose exec llm-sm llm-sm help
+docker compose exec llm-sm llm-sm version
+docker compose exec llm-sm llm-sm models
+docker compose exec llm-sm llm-sm ask "Explain dependency injection briefly"
 ```
 
-Interactive chat:
+Model management is explicit:
 
 ```bash
-docker exec -it llm-sm llm-sm chat
+docker compose exec llm-sm llm-sm pull qwen2.5:1.5b
+docker compose exec llm-sm llm-sm show qwen2.5:1.5b
+docker compose exec llm-sm llm-sm run qwen2.5:1.5b "Hello"
+docker compose exec llm-sm llm-sm rm qwen2.5:1.5b
 ```
 
-For piped input, use `docker exec -i` without `-t`:
+The CLI does not silently pull a missing model when another command selects it.
+
+### Structured JSON
 
 ```bash
-echo "Summarize this sentence" | docker exec -i llm-sm llm-sm ask
-cat src/Service.php | docker exec -i llm-sm llm-sm review "Focus on correctness"
-cat src/HotPath.php | docker exec -i llm-sm llm-sm code "Optimize without changing behavior"
-```
-
-### Model management
-
-The CLI itself is fixed; models are user-managed persistent runtime state in `/root/.ollama`.
-
-```bash
-docker exec -it llm-sm llm-sm models
-docker exec -it llm-sm llm-sm pull qwen2.5:1.5b
-docker exec -it llm-sm llm-sm show qwen2.5:1.5b
-docker exec -it llm-sm llm-sm run qwen2.5:1.5b "Hello"
-docker exec -it llm-sm llm-sm unload qwen2.5:1.5b
-docker exec -it llm-sm llm-sm rm qwen2.5:1.5b
-```
-
-Select a model per request:
-
-```bash
-docker exec -it llm-sm llm-sm ask -m qwen2.5:1.5b "Explain CQRS"
-```
-
-With the default `llm-sm-data` volume, model additions and removals survive container replacement. This lets users change the model set without changing or mutating the bundled CLI.
-
-### Developer commands
-
-Generic prompt:
-
-```bash
-echo "Explain this architecture" | \
-  docker exec -i llm-sm llm-sm prompt --system "Answer concisely"
-```
-
-Code generation/rewrite with a mounted repository:
-
-```bash
-docker exec -it llm-sm \
-  llm-sm code -f src/HotPath.php "Optimize this hot path without changing behavior"
-```
-
-Code review:
-
-```bash
-docker exec -it llm-sm \
-  llm-sm review src/Service.php "Focus on concurrency and resource leaks"
-```
-
-Structured JSON:
-
-```bash
-docker exec -i llm-sm \
+docker compose exec llm-sm \
   llm-sm json -r "Return an object with name and version"
 ```
 
+JSON Schema files are validated locally before a request is sent.
+
 ### AI commit
 
-The Conventional Commit + Gitmoji prompt is bundled with the image.
-
-With the current repository mounted at `/workspace`, the existing running container can read the staged Git diff directly:
+With a workspace mount:
 
 ```bash
 git add .
-docker exec -it llm-sm llm-sm ai-commit
+docker compose -f compose.yml -f compose.workspace.yml \
+  exec llm-sm llm-sm ai-commit --print
 ```
 
-Print only:
-
-```bash
-docker exec -it llm-sm llm-sm ai-commit --print
-```
-
-Commit immediately from the mounted repository:
-
-```bash
-docker exec -it llm-sm llm-sm ai-commit --yes
-```
-
-If the running container was created without a repository mount, send the staged diff through stdin instead:
+Without a repository mount, send the staged diff through stdin:
 
 ```bash
 git diff --cached | \
-  docker exec -i llm-sm llm-sm ai-commit --diff-stdin
+  docker compose exec -T llm-sm llm-sm ai-commit --diff-stdin
 ```
 
-And, if desired, feed that generated message back to host Git:
+## Input-size safety
 
-```bash
-git diff --cached | \
-  docker exec -i llm-sm llm-sm ai-commit --diff-stdin | \
-  git commit -F -
+`prompt`, `code`, `review` and `ai-commit` guard large local context before inference.
+
+Defaults:
+
+```text
+LLM_SM_INPUT_WARN_BYTES=65536
+LLM_SM_INPUT_MAX_BYTES=262144
 ```
 
-The feature is self-contained and does not depend on Toolset, `gitx`, Gemini, prompt caches, or a remote prompt source.
+Input above the soft limit produces a warning. Input above the hard limit is rejected rather than silently truncated.
 
-### CLI commands
+A deliberate override is available:
 
-| Command | Purpose |
-|---|---|
-| `llm-sm ask [-m model] <prompt>` | One-shot request |
-| `llm-sm chat [model]` | Interactive model session |
-| `llm-sm prompt [options] <prompt>` | Generic prompt with system/file/stdin context |
-| `llm-sm code [options] <task>` | Generate or improve code |
-| `llm-sm review [options] [file...] [focus]` | Review files or piped code |
-| `llm-sm json [options] <prompt>` | Native structured JSON output |
-| `llm-sm ai-commit [options]` | Generate/commit a message from Git changes |
-| `llm-sm models` | List installed Ollama models |
-| `llm-sm ps` | List loaded Ollama models |
-| `llm-sm run <model> [prompt]` | Run an explicit model |
-| `llm-sm show [model]` | Show model information |
-| `llm-sm pull <model>` | Pull another model |
-| `llm-sm rm <model>` | Remove a model |
-| `llm-sm unload [model]` | Unload a model from RAM/VRAM |
-| `llm-sm ollama <args...>` | Raw Ollama CLI passthrough |
-| `llm-sm api <path> [curl args...]` | Raw HTTP API access |
-| `llm-sm version` | CLI and Ollama versions |
-
-Container lifecycle stays a Docker/Compose responsibility:
-
-```bash
-docker compose ps
-docker compose logs -f llm-sm
-docker compose restart llm-sm
-docker compose down
+```text
+LLM_SM_ALLOW_LARGE_INPUT=1
 ```
+
+The guard is byte-based by design; it does not pretend to provide exact tokenizer accounting for arbitrary models.
 
 ## Native Ollama API
 
@@ -422,117 +302,87 @@ List models:
 curl http://127.0.0.1:11434/api/tags
 ```
 
-Chat:
+Non-streaming generation:
 
 ```bash
-curl http://127.0.0.1:11434/api/chat \
+curl http://127.0.0.1:11434/api/generate \
   -H 'Content-Type: application/json' \
-  -d '{
-    "model": "qwen2.5:3b",
-    "messages": [
-      {"role": "user", "content": "Explain dependency injection in one paragraph."}
-    ],
-    "stream": false
-  }'
+  -d '{"model":"qwen2.5:3b","prompt":"Reply with OK only.","stream":false}'
 ```
 
-## OpenAI-compatible API
+Ollama's supported OpenAI-compatible `/v1/...` endpoints are exposed directly as well.
 
-Ollama exposes an OpenAI-compatible API subset, including `/v1/chat/completions`:
+No proprietary provider API is added by this project.
 
-```bash
-curl http://127.0.0.1:11434/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "qwen2.5:3b",
-    "messages": [
-      {"role": "user", "content": "Write a short PHP example using readonly classes."}
-    ]
-  }'
-```
+## LocalDevStack integration
 
-For OpenAI SDK-compatible clients:
+The provider contract is:
 
 ```text
-Base URL: http://127.0.0.1:11434/v1
-API key: ollama
+service:  llm-sm
+internal: http://llm-sm:11434
+external: https://llm.localhost
 ```
 
-Some clients require a non-empty API key value even though the default local Ollama server does not use it for authentication.
+Internal Docker consumers should use `http://llm-sm:11434` directly. They should not route service-to-service traffic through Nginx.
 
-## Runtime tuning
+Nginx owns the optional user-facing HTTPS route. LocalDevStack can omit the direct host `11434` mapping entirely and expose only `443` while keeping `llm-sm:11434` available on the internal network.
 
-Common runtime variables:
+The broader stack must remain usable when `llm-sm` is disabled or absent. Consumer-specific AI behavior belongs in those consumers, not in this image.
 
-| Variable | Purpose |
-|---|---|
-| `OLLAMA_NUM_PARALLEL` | Parallel requests per model |
-| `OLLAMA_MAX_LOADED_MODELS` | Maximum simultaneously loaded models |
-| `OLLAMA_KEEP_ALIVE` | How long a model remains loaded |
-| `OLLAMA_CONTEXT_LENGTH` | Default context length |
-| `OLLAMA_MAX_QUEUE` | Maximum queued requests while busy |
-| `OLLAMA_NO_CLOUD` | Disable Ollama cloud functionality |
+## Privacy and exposure
 
-Example:
+Runtime defaults are intentionally local:
 
-```bash
-docker run -d \
-  --name llm-sm \
-  --restart unless-stopped \
-  -p 127.0.0.1:11434:11434 \
-  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
-  -e OLLAMA_NUM_PARALLEL=2 \
-  -e OLLAMA_KEEP_ALIVE=15m \
-  infocyph/llm-sm:latest
-```
+- `OLLAMA_NO_CLOUD=1`
+- no external AI fallback added by this project
+- no telemetry layer added by this project
+- no Docker socket required
+- no automatic repository ingestion
+- no wildcard CORS policy enabled by default
+- standalone examples bind `11434` to `127.0.0.1`
 
-## Model strategy
+If a browser client needs direct access, configure explicit `OLLAMA_ORIGINS` values rather than enabling wildcard CORS.
 
-One small model is baked into each published image instead of being downloaded at container startup.
+## Optional upstream tuning
 
-The image supplies the initial deterministic model state; the named volume supplies persistent user-managed state. This gives immediate first startup while allowing users to add, remove, or select other models without losing those changes when a container is replaced.
-
-Advantages:
-
-- deterministic release images
-- immediate startup after image pull
-- no first-run model download
-- offline operation after the image is pulled
-- persistent user-selected models
-- fixed CLI/runtime tooling independent from mutable model data
-
-## Publishing
-
-Publishing is maintainer-managed by GitHub Actions. Consumers do not need the Dockerfile or a local build toolchain.
-
-Each GitHub Release publishes into Docker Hub and GHCR:
-
-- CPU/NVIDIA: `<release>` and `latest`
-- AMD ROCm: `amd-<release>` and `amd-latest`
-- immutable release tags are never changed by scheduled builds
-- weekly scheduled builds refresh only `latest` and `amd-latest`
-- both variants use separate Buildx cache scopes
-- pushed digests receive provenance attestations
-
-Required maintainer secrets:
+Conservative defaults remain:
 
 ```text
-DOCKER_USERNAME
-DOCKER_PASSWORD
+OLLAMA_NUM_PARALLEL=1
+OLLAMA_MAX_LOADED_MODELS=1
+OLLAMA_KEEP_ALIVE=5m
 ```
 
-GHCR publishing uses the repository `GITHUB_TOKEN`.
+Additional upstream settings such as `OLLAMA_CONTEXT_LENGTH`, `OLLAMA_MAX_QUEUE`, `OLLAMA_LOAD_TIMEOUT` and `OLLAMA_ORIGINS` can be passed when a real deployment needs them. Larger context and parallelism increase RAM/VRAM pressure.
 
-## Validation
+For outbound model pulls behind a proxy, prefer `HTTPS_PROXY`. Do not set `HTTP_PROXY` blindly because it can interfere with normal Ollama client/server communication.
 
-The `CLI Check` workflow validates:
+## Validation and release safety
 
-- Bash syntax and ShellCheck
-- default/CPU/NVIDIA/AMD Compose definitions
-- repository-layout CLI smoke tests
-- bundled image-layout CLI smoke tests
-- bundled `ai-commit` prompt availability
-- absence of mutable CLI install/uninstall commands
+Lightweight CI validates Bash/ShellCheck, command registry, model-selection precedence, structured JSON handling, input guards, Compose contracts and Dockerfile structure without downloading the 3B model on every PR.
+
+The reusable `Runtime Check` performs the real model-bearing standard-image gate, including:
+
+- fresh-volume baked-model presence
+- daemon health
+- non-streaming generation
+- streaming chat
+- bundled CLI inference
+- missing-model behavior
+- persistent-volume recreation
+- SIGTERM shutdown and OOM state
+
+Publication additionally:
+
+- resolves latest stable release source explicitly
+- prevents prereleases from moving stable `latest` tags
+- protects immutable release tags in Docker Hub and GHCR
+- resolves each moving Ollama base to one digest for the whole publish run
+- validates the standard runtime before publication
+- enables BuildKit provenance and SBOM
+- verifies both registries resolve the pushed digest
+- verifies the published platform as `linux/amd64`
 
 ## License
 
