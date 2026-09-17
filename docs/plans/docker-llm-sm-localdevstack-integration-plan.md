@@ -939,8 +939,8 @@ Overall status: **in progress**
 | Batch | Scope | Status |
 |---|---|---|
 | Batch 1 | CLI/runtime responsibility cleanup, model resolution, JSON/schema hardening, lightweight CLI regression gates | ✅ Complete |
-| Batch 2 | Compose QoL, Dockerfile/runtime hardening, daemon/model/persistence smoke coverage | ⏭️ Next |
-| Batch 3 | Publication/release safety, stable-source resolution, manifest/digest verification, platform strategy | ⏳ Pending |
+| Batch 2 | Compose QoL, Dockerfile/runtime hardening, daemon/model/persistence smoke coverage | ✅ Complete |
+| Batch 3 | Publication/release safety, stable-source resolution, manifest/digest verification, platform strategy | ⏭️ Next |
 | Batch 4 | README/QoL reconciliation, LocalDevStack interoperability, input-budget/prompt optimization, final sweep | ⏳ Pending |
 
 ## Batch 1 — complete
@@ -960,13 +960,41 @@ Implementation commit: `5d3ff793e59d5867d4164a72f2be61c3a1a8e470`
 - [x] Add command-registry/help, lifecycle-removal, model-precedence, JSON-payload and malformed-schema regression gates.
 - [x] Preserve Compose syntax/config validation in lightweight CI.
 
-## Batch 2 — next
+## Batch 2 — complete
+
+Implementation commit: `687daea5f3dfbd977ba65538929c32e1231e10ca`
+
+- [x] Remove fixed `container_name` from standalone/CPU/NVIDIA/AMD Compose definitions while preserving service key `llm-sm`.
+- [x] Keep the shared `llm-sm-data` volume contract and add CI coverage for the `LLM_SM_VOLUME` isolation override.
+- [x] Add explicit upstream runtime/package-manager preflight assumptions to the Dockerfile.
+- [x] Change build readiness/model verification to validate the Ollama HTTP API as well as `ollama show`.
+- [x] Keep daemon health independent from persistent model contents by probing `/api/tags` rather than the bundled CLI/default model.
+- [x] Add explicit `STOPSIGNAL SIGTERM`.
+- [x] Add a lightweight BuildKit/Dockerfile structural PR gate without executing the expensive model-bake layers.
+- [x] Add reusable/manual `Runtime Check` workflow for the real standard-image bake and smoke path.
+- [x] Add fresh-volume baked-model verification and API readiness coverage.
+- [x] Add non-streaming generate plus streaming chat coverage and a bundled CLI inference request.
+- [x] Add explicit missing-model failure validation without implicitly pulling another model.
+- [x] Add persistent-volume recreation validation using the same baked model store, with no second large model download.
+- [x] Add bounded health waiting, clean `docker stop`/SIGTERM checks and OOM-state checks.
+- [x] Keep the expensive runtime workflow out of mandatory every-PR execution; Batch 3 will wire the same smoke contract into release safety.
+
+Validation note:
+
+- Shell/YAML structure for the new smoke path was validated during implementation.
+- The full model-bearing Docker runtime smoke is intentionally executed by the new GitHub `Runtime Check` workflow, not inside the lightweight planning environment.
+
+## Batch 3 — next
 
 Planned focus:
 
-- [ ] Remove fixed `container_name` from standalone/CPU/NVIDIA/AMD Compose definitions while preserving service key `llm-sm`.
-- [ ] Reconcile shared `llm-sm-data` volume behavior and isolated-volume override expectations.
-- [ ] Harden Dockerfile build-time Ollama readiness/model verification and upstream compatibility assumptions.
-- [ ] Add runtime smoke coverage for daemon health, fresh-volume baked model, generate/chat streaming/non-streaming, missing-model behavior and clean SIGTERM.
-- [ ] Add persistence recreation coverage without downloading a second large model.
-- [ ] Add a cheap Dockerfile/build-definition structural gate that does not require the 3B model download on every PR.
+- [ ] Add safe `workflow_dispatch` recovery behavior to Docker publication.
+- [ ] Resolve the latest published **stable** release explicitly for scheduled refreshes.
+- [ ] Define prerelease behavior so prereleases cannot move stable `latest` tags accidentally.
+- [ ] Add immutable release-tag guards for both Docker Hub and GHCR publication paths.
+- [ ] Add workflow/job concurrency and timeout bounds around expensive publication work.
+- [ ] Record resolved upstream base digest, Ollama version, baked-model metadata and published image digest.
+- [ ] Verify pushed Docker Hub/GHCR tags resolve to the expected digest/manifest.
+- [ ] Keep standard and ROCm manifests separate and verify their advertised platforms.
+- [ ] Wire the Batch 2 runtime smoke contract into the release path without making normal PR checks model-heavy.
+- [ ] Decide standard `linux/arm64` publication only from a validated native runtime path; do not claim it prematurely.
