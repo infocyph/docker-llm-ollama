@@ -1,7 +1,6 @@
 services:
   llm-sm:
     image: ${LLM_SM_IMAGE:-infocyph/llm-sm:latest}
-    container_name: llm-sm
     restart: unless-stopped
     gpus: all
     ports:

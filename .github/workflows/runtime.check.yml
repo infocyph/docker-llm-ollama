@@ -1,0 +1,54 @@
+name: Runtime Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Model to bake and validate
+        required: false
+        default: qwen2.5:3b
+        type: string
+  workflow_call:
+    inputs:
+      model:
+        description: Model to bake and validate
+        required: false
+        default: qwen2.5:3b
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  standard:
+    name: Standard runtime smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build smoke image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: llm-sm:runtime-smoke
+          build-args: |
+            OLLAMA_BASE_IMAGE=ollama/ollama:latest
+            OLLAMA_MODEL=${{ inputs.model || 'qwen2.5:3b' }}
+          cache-from: type=gha,scope=runtime-standard
+          cache-to: type=gha,mode=max,scope=runtime-standard
+
+      - name: Run runtime smoke
+        env:
+          OLLAMA_MODEL: ${{ inputs.model || 'qwen2.5:3b' }}
+        run: scripts/ci/runtime-smoke.sh llm-sm:runtime-smoke

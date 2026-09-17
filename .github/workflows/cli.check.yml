@@ -20,15 +20,15 @@ jobs:
 
       - name: Validate CLI
         run: |
-          bash -n scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh
-          shellcheck -x scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh
+          bash -n scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh scripts/ci/*.sh
+          shellcheck -x scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh scripts/ci/*.sh
 
           for retired in start stop restart status logs install uninstall; do
             test ! -e "scripts/commands/${retired}.sh"
           done
           test ! -e scripts/lib/docker.sh
 
-          if grep -R -nE 'docker (inspect|exec|start|stop|restart|logs)|container_model|container_running|require_container|require_running' scripts; then
+          if grep -R -nE 'docker (inspect|exec|start|stop|restart|logs)|container_model|container_running|require_container|require_running' scripts/llm-sm scripts/lib scripts/commands; then
             echo 'Host-side Docker lifecycle logic must not exist in the bundled CLI.' >&2
             exit 1
           fi
@@ -65,12 +65,39 @@ jobs:
           fi
           grep -q 'Schema file is not valid JSON' /tmp/llm-sm-json.err
 
-      - name: Validate Compose examples
+      - name: Validate Compose contracts
         run: |
-          docker compose -f compose.yml config >/dev/null
-          docker compose -f examples/compose/cpu.yml config >/dev/null
-          docker compose -f examples/compose/nvidia.yml config >/dev/null
-          docker compose -f examples/compose/amd.yml config >/dev/null
+          for file in \
+            compose.yml \
+            examples/compose/cpu.yml \
+            examples/compose/nvidia.yml \
+            examples/compose/amd.yml; do
+            docker compose -f "$file" config >/dev/null
+            docker compose -f "$file" config --services | grep -qx llm-sm
+
+            if grep -qE '^[[:space:]]*container_name:' "$file"; then
+              echo "Fixed container_name is not allowed in $file." >&2
+              exit 1
+            fi
+          done
+
+          docker compose -f compose.yml config --volumes | grep -qx llm-sm-data
+          LLM_SM_VOLUME=llm-sm-isolated docker compose -f compose.yml config \
+            | grep -q 'name: llm-sm-isolated'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Validate Dockerfile structure
+        run: |
+          docker buildx build --check --progress=plain .
+
+          test "$(grep -Ec '^EXPOSE[[:space:]]+11434[[:space:]]*$' Dockerfile)" -eq 1
+          test "$(grep -Ec '^EXPOSE[[:space:]]+' Dockerfile)" -eq 1
+          grep -Fqx 'STOPSIGNAL SIGTERM' Dockerfile
+          grep -Fq 'http://127.0.0.1:11434/api/tags' Dockerfile
+          grep -Fqx 'ENTRYPOINT ["/bin/ollama"]' Dockerfile
+          grep -Fqx 'CMD ["serve"]' Dockerfile
 
       - name: Smoke test repository CLI
         run: |
