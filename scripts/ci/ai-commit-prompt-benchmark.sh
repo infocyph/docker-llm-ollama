@@ -51,13 +51,18 @@ header_ok() {
   [[ "$first" =~ ^:[a-zA-Z0-9_+-]+:[[:space:]]+(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9-]+\))?!?:[[:space:]].+ ]]
 }
 
+container_file_bytes() {
+  local path="$1"
+  docker exec "$name" sh -c 'wc -c < "$1"' _ "$path" | tr -d '[:space:]'
+}
+
 run_case() {
   local label="$1" prompt_file="${2:-}" run start end elapsed output size
 
   if [[ -n "$prompt_file" ]]; then
-    size="$(docker exec "$name" wc -c < "$prompt_file" | tr -d '[:space:]')"
+    size="$(container_file_bytes "$prompt_file")"
   else
-    size="$(docker exec "$name" wc -c < /usr/local/lib/llm-sm/prompts/ai-commit.txt | tr -d '[:space:]')"
+    size="$(container_file_bytes /usr/local/lib/llm-sm/prompts/ai-commit.txt)"
   fi
 
   for run in $(seq 1 "$RUNS"); do
