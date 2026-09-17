@@ -177,8 +177,10 @@ jobs:
           OLLAMA_MODEL: qwen2.5:3b
         run: |
           set -euo pipefail
-          ollama_version="$(docker run --rm --entrypoint /bin/ollama "$CANDIDATE_IMAGE" --version | head -n 1)"
-          cli_version="$(docker run --rm --entrypoint llm-sm "$CANDIDATE_IMAGE" version | head -n 1)"
+          ollama_output="$(docker run --rm --entrypoint /bin/ollama "$CANDIDATE_IMAGE" --version)"
+          cli_output="$(docker run --rm --entrypoint llm-sm "$CANDIDATE_IMAGE" version)"
+          ollama_version="${ollama_output%%$'\n'*}"
+          cli_version="${cli_output%%$'\n'*}"
           model_digest='build-verified; runtime digest not queried on this variant'
 
           if [[ '${{ matrix.runtime_smoke }}' == 'true' ]]; then
