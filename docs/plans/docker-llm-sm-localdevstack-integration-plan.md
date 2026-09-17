@@ -934,14 +934,14 @@ Do not replace the Section 16 order. Fold these review additions into it as foll
 
 Last updated: **2026-09-17**
 
-Overall status: **in progress**
+Overall status: **repository implementation complete; release compatibility gate pending**
 
 | Batch | Scope | Status |
 |---|---|---|
 | Batch 1 | CLI/runtime responsibility cleanup, model resolution, JSON/schema hardening, lightweight CLI regression gates | ✅ Complete |
 | Batch 2 | Compose QoL, Dockerfile/runtime hardening, daemon/model/persistence smoke coverage | ✅ Complete |
-| Batch 3 | Publication/release safety, stable-source resolution, manifest/digest verification, platform strategy | ⏭️ Next |
-| Batch 4 | README/QoL reconciliation, LocalDevStack interoperability, input-budget/prompt optimization, final sweep | ⏳ Pending |
+| Batch 3 | Publication/release safety, stable-source resolution, digest verification, platform strategy | ✅ Complete |
+| Batch 4 | README/QoL, Compose workspace mounting, input guards, provider-side interoperability, final sweep | ✅ Repo complete / 🚧 external release gate |
 
 ## Batch 1 — complete
 
@@ -977,24 +977,67 @@ Implementation commit: `687daea5f3dfbd977ba65538929c32e1231e10ca`
 - [x] Add explicit missing-model failure validation without implicitly pulling another model.
 - [x] Add persistent-volume recreation validation using the same baked model store, with no second large model download.
 - [x] Add bounded health waiting, clean `docker stop`/SIGTERM checks and OOM-state checks.
-- [x] Keep the expensive runtime workflow out of mandatory every-PR execution; Batch 3 will wire the same smoke contract into release safety.
+- [x] Keep the expensive runtime workflow out of mandatory every-PR execution; Batch 3 wires the same smoke contract into release safety.
 
-Validation note:
+## Batch 3 — complete
 
-- Shell/YAML structure for the new smoke path was validated during implementation.
-- The full model-bearing Docker runtime smoke is intentionally executed by the new GitHub `Runtime Check` workflow, not inside the lightweight planning environment.
+Primary publication hardening commit: `c64307646f58fcaa0fcc026c0e84417f7842123e`
 
-## Batch 3 — next
+- [x] Add conservative `workflow_dispatch` recovery with optional source tag and explicit immutable-tag opt-in.
+- [x] Resolve scheduled/manual default source through GitHub's latest published stable release endpoint.
+- [x] Prevent prereleases from moving stable `latest` / `amd-latest` tags.
+- [x] Add immutable-tag existence guards for Docker Hub and GHCR.
+- [x] Add publication concurrency and 120-minute job bounds.
+- [x] Resolve `ollama/ollama:latest` / `ollama/ollama:rocm` once to a digest per variant so validation and publication use identical upstream bits.
+- [x] Build an explicit `linux/amd64` candidate for each variant before publication.
+- [x] Run the current Batch 2 runtime harness against the standard release candidate while allowing older stable source tags to be validated with current tooling.
+- [x] Record upstream base digest, Ollama version, bundled CLI version, model metadata and published digest.
+- [x] Enable BuildKit provenance and SBOM plus Docker Hub/GHCR attestations.
+- [x] Verify Docker Hub and GHCR resolve the pushed digest and can pull it as `linux/amd64`.
+- [x] Re-check the published standard image by digest before publication is considered complete.
+- [x] Keep standard and ROCm publication families separate.
+- [x] Keep arm64 disabled until a real native model/runtime gate exists; CI rejects accidental multi-arch enablement.
 
-Planned focus:
+## Batch 4 — repository implementation complete
 
-- [ ] Add safe `workflow_dispatch` recovery behavior to Docker publication.
-- [ ] Resolve the latest published **stable** release explicitly for scheduled refreshes.
-- [ ] Define prerelease behavior so prereleases cannot move stable `latest` tags accidentally.
-- [ ] Add immutable release-tag guards for both Docker Hub and GHCR publication paths.
-- [ ] Add workflow/job concurrency and timeout bounds around expensive publication work.
-- [ ] Record resolved upstream base digest, Ollama version, baked-model metadata and published image digest.
-- [ ] Verify pushed Docker Hub/GHCR tags resolve to the expected digest/manifest.
-- [ ] Keep standard and ROCm manifests separate and verify their advertised platforms.
-- [ ] Wire the Batch 2 runtime smoke contract into the release path without making normal PR checks model-heavy.
-- [ ] Decide standard `linux/arm64` publication only from a validated native runtime path; do not claim it prematurely.
+Implementation range: `354b2257c5a3513fea6909f9dbc938208269dfc5` through `dca09d4c67d192bca230584251d762aa70d13d29`
+
+Notable provider-contract test: `b5d85d60b0caf0b70a6965c5fa885d6a6b32b03b`
+
+Prompt benchmark harness: `32a41cb81720605b00305b79d14a8f921414c67c`
+
+- [x] Add `compose.workspace.yml` as an optional repository/workspace bind-mount override.
+- [x] Mount workspaces at `/workspace` without changing the persistent `/root/.ollama` model volume.
+- [x] Default workspace mounts to read-only and require deliberate `LLM_SM_WORKSPACE_MODE=rw` for mutating Git operations.
+- [x] Add CI coverage proving workspace overlay + model volume coexist and read-only/read-write behavior is explicit.
+- [x] Add byte-based soft/hard context guards to `prompt`, `code`, `review` and `ai-commit`.
+- [x] Never silently truncate oversized context; allow only explicit `LLM_SM_ALLOW_LARGE_INPUT=1` bypass.
+- [x] Document workspace mounting, model-store sharing/isolation, input guards, provider boundaries, LocalDevStack URLs and release safety in the README.
+- [x] Add a peer-container runtime smoke proving `http://llm-sm:11434` works through Docker DNS with no host port mapping.
+- [x] Add OpenAI-compatible `/v1/chat/completions` runtime validation.
+- [x] Confirm the Nginx hardening branch contains complementary `llm.localhost` route, streaming, missing-provider and late-start DNS smoke coverage.
+- [x] Add an `ai-commit` prompt benchmark harness so prompt size/latency can be compared without weakening output rules blindly.
+- [x] Keep the existing bundled commit prompt unchanged until an empirical candidate benchmark demonstrates no quality regression.
+
+## Release compatibility gate — still required
+
+Do **not** publish the next provider release yet solely because repository implementation is complete.
+
+The following external/runtime checks remain intentionally open:
+
+- [ ] Run the lightweight CLI/Compose/Dockerfile CI on the completed branch/PR.
+- [ ] Run the model-bearing `Runtime Check` workflow on the completed standard image path.
+- [ ] Integrate `llm-sm` as an optional service in LocalDevStack and prove stack startup with and without it.
+- [ ] Integrate docker-tools' provider abstraction with `http://llm-sm:11434` and prove graceful behavior when the provider is absent.
+- [ ] Run the full Nginx + real `llm-sm` end-to-end route test for `https://llm.localhost`, including streaming `/api/chat`, `/api/generate` and `/v1/...`.
+- [ ] Run the prompt benchmark harness against any proposed reduced prompt before changing the bundled prompt.
+- [ ] Perform real ROCm runtime validation only on suitable AMD hardware; CPU CI must not be treated as a ROCm runtime proof.
+- [ ] Add standard arm64 publication only after a native arm64 build/model/runtime gate exists.
+
+Current dependency observation at this tracker update:
+
+- `docker-nginx` hardening already contains dedicated `llm.localhost` route/streaming contract tests.
+- LocalDevStack `main` does not yet expose an `llm-sm` service contract.
+- docker-tools `main` does not yet expose an `llm-sm` provider contract.
+
+Therefore the provider repository itself is ready for PR/final CI, while Section 14 remains the deliberate release blocker until the downstream stack integration is completed.
