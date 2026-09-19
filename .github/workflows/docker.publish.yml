@@ -170,12 +170,12 @@ jobs:
       - name: Run standard runtime release gate
         if: matrix.runtime_smoke
         env:
-          OLLAMA_MODEL: qwen2.5:3b
+          OLLAMA_MODEL: qwen3:14b
         run: .automation/scripts/ci/runtime-smoke.sh "$CANDIDATE_IMAGE"
 
       - name: Record candidate metadata
         env:
-          OLLAMA_MODEL: qwen2.5:3b
+          OLLAMA_MODEL: qwen3:14b
         run: |
           set -euo pipefail
           ollama_output="$(docker run --rm --entrypoint /bin/ollama "$CANDIDATE_IMAGE" --version)"
@@ -321,7 +321,7 @@ jobs:
         if: matrix.runtime_smoke
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
-          OLLAMA_MODEL: qwen2.5:3b
+          OLLAMA_MODEL: qwen3:14b
         run: |
           set -euo pipefail
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}@${DIGEST}"
@@ -352,7 +352,7 @@ jobs:
             echo "- Resolved base digest: \`$OLLAMA_BASE_DIGEST\`"
             echo "- Ollama: \`$OLLAMA_VERSION\`"
             echo "- CLI: \`$CLI_VERSION\`"
-            echo "- Default model: \`qwen2.5:3b\`"
+            echo "- Default model: \`qwen3:14b\`"
             echo "- Model digest: \`$MODEL_DIGEST\`"
             echo "- Published digest: \`$DIGEST\`"
             echo "- Platform: \`linux/amd64\`"
