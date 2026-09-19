@@ -1,7 +1,7 @@
 ARG OLLAMA_BASE_IMAGE=ollama/ollama:latest
 FROM ${OLLAMA_BASE_IMAGE}
 
-ARG LLM_SM_VERSION=0.04
+ARG LLM_SM_VERSION
 
 LABEL org.opencontainers.image.source="https://github.com/infocyph/docker-llm-sm"
 LABEL org.opencontainers.image.description="Local small LLM runtime powered by Ollama"
