@@ -77,7 +77,7 @@ encode_images_json() {
   shift
   local image
   local encoded_file
-  check_attachment_set "Vision attachments" "$@"
+  check_attachment_bytes_set "Vision payload" "$@"
   encoded_file="$(mktemp)"
 
   for image in "$@"; do
