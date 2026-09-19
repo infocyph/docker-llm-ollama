@@ -102,7 +102,7 @@ validate_attachment_limits() {
   [[ "$max_pages" =~ ^[0-9]+$ ]] || die "LLM_SM_PDF_MAX_PAGES must be a non-negative integer"
 }
 
-check_attachment_set() {
+check_attachment_bytes_set() {
   local label="$1"
   shift
   (( $# > 0 )) || return 0
@@ -110,12 +110,7 @@ check_attachment_set() {
   validate_attachment_limits
   local max_bytes="${LLM_SM_ATTACHMENT_MAX_BYTES:-$DEFAULT_ATTACHMENT_MAX_BYTES}"
   local total_max_bytes="${LLM_SM_ATTACHMENTS_MAX_BYTES:-$DEFAULT_ATTACHMENTS_MAX_BYTES}"
-  local max_count="${LLM_SM_ATTACHMENT_MAX_COUNT:-$DEFAULT_ATTACHMENT_MAX_COUNT}"
   local file bytes total_bytes=0
-
-  if (( max_count > 0 && $# > max_count )) && ! large_input_allowed; then
-    die "$label has $# files; attachment-count limit is $max_count. Reduce the request, raise LLM_SM_ATTACHMENT_MAX_COUNT, set it to 0, or use LLM_SM_ALLOW_LARGE_INPUT=1 deliberately."
-  fi
 
   for file in "$@"; do
     [[ -f "$file" ]] || die "Attachment file not found: $file"
@@ -130,6 +125,21 @@ check_attachment_set() {
   if (( total_max_bytes > 0 && total_bytes > total_max_bytes )) && ! large_input_allowed; then
     die "$label totals ${total_bytes} bytes; aggregate limit is ${total_max_bytes}. Raise LLM_SM_ATTACHMENTS_MAX_BYTES, set it to 0, or use LLM_SM_ALLOW_LARGE_INPUT=1 deliberately."
   fi
+}
+
+check_attachment_set() {
+  local label="$1"
+  shift
+  (( $# > 0 )) || return 0
+
+  validate_attachment_limits
+  local max_count="${LLM_SM_ATTACHMENT_MAX_COUNT:-$DEFAULT_ATTACHMENT_MAX_COUNT}"
+
+  if (( max_count > 0 && $# > max_count )) && ! large_input_allowed; then
+    die "$label has $# files; attachment-count limit is $max_count. Reduce the request, raise LLM_SM_ATTACHMENT_MAX_COUNT, set it to 0, or use LLM_SM_ALLOW_LARGE_INPUT=1 deliberately."
+  fi
+
+  check_attachment_bytes_set "$label" "$@"
 }
 
 read_input() {
