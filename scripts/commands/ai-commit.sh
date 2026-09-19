@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
 # shellcheck source=/dev/null
-source "$LLM_SM_RUNTIME_ROOT/lib/commit.sh"
+source "$LLM_OLLAMA_RUNTIME_ROOT/lib/commit.sh"
 
 print_ai_commit_help() {
   cat <<'EOF'
-Usage: llm-sm ai-commit [options]
+Usage: llm-ollama ai-commit [options]
 
-Generate a commit message using llm-sm's bundled Conventional Commit + Gitmoji
+Generate a commit message using llm-ollama's bundled Conventional Commit + Gitmoji
 prompt and local Ollama inference.
 
 By default, staged changes are read from the current Git repository. This works
@@ -23,7 +23,7 @@ Options:
   -h, --help            Show this help
 
 Environment:
-  LLM_SM_AI_COMMIT_PROMPT_FILE
+  LLM_OLLAMA_AI_COMMIT_PROMPT_FILE
                         Override the bundled prompt with another local file
 EOF
 }
