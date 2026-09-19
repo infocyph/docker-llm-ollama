@@ -161,6 +161,7 @@ jobs:
           tags: llm-sm:publish-candidate-${{ matrix.variant }}
           build-args: |
             OLLAMA_BASE_IMAGE=${{ env.RESOLVED_OLLAMA_BASE_IMAGE }}
+            LLM_SM_VERSION=${{ env.RELEASE_TAG }}
           cache-from: type=gha,scope=publish-candidate-${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=publish-candidate-${{ matrix.variant }}
           provenance: false
@@ -180,7 +181,186 @@ jobs:
           ollama_output="$(docker run --rm --entrypoint /bin/ollama "$CANDIDATE_IMAGE" --version)"
           cli_output="$(docker run --rm --entrypoint llm-sm "$CANDIDATE_IMAGE" version)"
           ollama_version="${ollama_output%%$'\n'*}"
-          cli_version="${cli_output%%$'\n'*}"
+          cli_version="${cli_output%%'build-verified; runtime digest not queried on this variant'
+
+          if [[ '${{ matrix.runtime_smoke }}' == 'true' ]]; then
+            name="llm-sm-meta-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
+            trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+            docker run -d --name "$name" "$CANDIDATE_IMAGE" >/dev/null
+            for _ in $(seq 1 90); do
+              status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$name" 2>/dev/null || true)"
+              [[ "$status" == 'healthy' ]] && break
+              [[ "$status" == 'unhealthy' ]] && { docker logs "$name" >&2 || true; exit 1; }
+              sleep 2
+            done
+            [[ "$(docker inspect -f '{{.State.Health.Status}}' "$name")" == 'healthy' ]]
+            tags="$(docker exec "$name" curl --connect-timeout 3 -fsS http://127.0.0.1:11434/api/tags)"
+            model_digest="$(jq -r --arg model "$OLLAMA_MODEL" 'first(.models[]? | select(.name == $model or .model == $model) | .digest) // empty' <<<"$tags")"
+            [[ -n "$model_digest" ]]
+          fi
+
+          {
+            echo "OLLAMA_VERSION=$ollama_version"
+            echo "CLI_VERSION=$cli_version"
+            echo "MODEL_DIGEST=$model_digest"
+          } >> "$GITHUB_ENV"
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Enforce immutable release tags
+        if: env.PUBLISH_RELEASE_TAG == 'true'
+        env:
+          IMMUTABLE_TAG: ${{ matrix.tag_prefix }}${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          assert_absent() {
+            local image="$1" output
+            if output="$(docker buildx imagetools inspect "$image" 2>&1)"; then
+              echo "Refusing to overwrite immutable release tag: $image" >&2
+              return 1
+            fi
+            case "$output" in
+              *'not found'*|*'manifest unknown'*|*'NAME_UNKNOWN'*) return 0 ;;
+              *) printf '%s\n' "$output" >&2; return 1 ;;
+            esac
+          }
+          assert_absent "docker.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${IMMUTABLE_TAG}"
+          assert_absent "ghcr.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${IMMUTABLE_TAG}"
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: |
+            docker.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ matrix.tag_prefix }}${{ env.RELEASE_TAG }},enable=${{ env.PUBLISH_RELEASE_TAG == 'true' }}
+            type=raw,value=${{ matrix.tag_prefix }}latest,enable=${{ env.PUBLISH_LATEST_TAG == 'true' }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ env.SOURCE_SHA }}
+            org.opencontainers.image.version=${{ env.RELEASE_TAG }}
+
+      - name: Build and push Docker images
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .release
+          platforms: linux/amd64
+          pull: false
+          push: true
+          build-args: |
+            OLLAMA_BASE_IMAGE=${{ env.RESOLVED_OLLAMA_BASE_IMAGE }}
+            LLM_SM_VERSION=${{ env.RELEASE_TAG }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=publish-candidate-${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=publish-${{ matrix.variant }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Generate Docker Hub provenance attestation
+        uses: actions/attest@v4
+        with:
+          subject-name: docker.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Generate GHCR provenance attestation
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Verify published digest and platform
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          RELEASE_REF: ${{ matrix.tag_prefix }}${{ env.RELEASE_TAG }}
+          LATEST_REF: ${{ matrix.tag_prefix }}latest
+        run: |
+          set -euo pipefail
+          if [[ "$PUBLISH_RELEASE_TAG" == 'true' ]]; then verify_tag="$RELEASE_REF"; else verify_tag="$LATEST_REF"; fi
+
+          verify_digest() {
+            local ref="$1" found
+            found="$(docker buildx imagetools inspect "$ref" | awk '/^Digest:/ {print $2; exit}')"
+            [[ "$found" == "$DIGEST" ]] || { echo "Digest mismatch for $ref: ${found:-<empty>}" >&2; return 1; }
+          }
+
+          verify_digest "docker.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${verify_tag}"
+          verify_digest "ghcr.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${verify_tag}"
+
+          for registry in docker.io ghcr.io; do
+            ref="${registry}/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}@${DIGEST}"
+            docker pull --platform linux/amd64 "$ref" >/dev/null
+            test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$ref")" = 'linux/amd64'
+          done
+
+      - name: Verify published standard runtime by digest
+        if: matrix.runtime_smoke
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          OLLAMA_MODEL: qwen2.5:3b
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}@${DIGEST}"
+          name="llm-sm-published-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
+          trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
+          docker run -d --name "$name" "$image" >/dev/null
+          for _ in $(seq 1 90); do
+            status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$name" 2>/dev/null || true)"
+            [[ "$status" == 'healthy' ]] && break
+            [[ "$status" == 'unhealthy' ]] && { docker logs "$name" >&2 || true; exit 1; }
+            sleep 2
+          done
+          [[ "$(docker inspect -f '{{.State.Health.Status}}' "$name")" == 'healthy' ]]
+          tags="$(docker exec "$name" curl --connect-timeout 3 -fsS http://127.0.0.1:11434/api/tags)"
+          jq -e --arg model "$OLLAMA_MODEL" 'any(.models[]?; .name == $model or .model == $model)' <<<"$tags" >/dev/null
+
+      - name: Summarize publication
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          {
+            echo "## Published ${{ matrix.variant }} image"
+            echo
+            echo "- Source release: \`$RELEASE_TAG\`"
+            echo "- Source revision: \`$SOURCE_SHA\`"
+            echo "- Source prerelease: \`$SOURCE_IS_PRERELEASE\`"
+            echo "- Upstream base: \`${{ matrix.ollama_base_image }}\`"
+            echo "- Resolved base digest: \`$OLLAMA_BASE_DIGEST\`"
+            echo "- Ollama: \`$OLLAMA_VERSION\`"
+            echo "- CLI: \`$CLI_VERSION\`"
+            echo "- Default model: \`qwen2.5:3b\`"
+            echo "- Model digest: \`$MODEL_DIGEST\`"
+            echo "- Published digest: \`$DIGEST\`"
+            echo "- Platform: \`linux/amd64\`"
+            echo "- Immutable tag published: \`$PUBLISH_RELEASE_TAG\`"
+            echo "- Stable moving tag published: \`$PUBLISH_LATEST_TAG\`"
+            echo '- BuildKit provenance: `mode=max`'
+            echo '- BuildKit SBOM: enabled'
+            echo '- GitHub/Sigstore provenance: Docker Hub + GHCR'
+          } >> "$GITHUB_STEP_SUMMARY"\n'*}"
+          [[ "$cli_version" == "llm-sm $RELEASE_TAG" ]] || {
+            echo "CLI version mismatch: expected 'llm-sm $RELEASE_TAG', got '$cli_version'." >&2
+            exit 1
+          }
           model_digest='build-verified; runtime digest not queried on this variant'
 
           if [[ '${{ matrix.runtime_smoke }}' == 'true' ]]; then
@@ -266,6 +446,7 @@ jobs:
           push: true
           build-args: |
             OLLAMA_BASE_IMAGE=${{ env.RESOLVED_OLLAMA_BASE_IMAGE }}
+            LLM_SM_VERSION=${{ env.RELEASE_TAG }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=publish-candidate-${{ matrix.variant }}
