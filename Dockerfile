@@ -1,25 +1,25 @@
 ARG OLLAMA_BASE_IMAGE=ollama/ollama:latest
 FROM ${OLLAMA_BASE_IMAGE}
 
-ARG LLM_SM_VERSION
+ARG LLM_OLLAMA_VERSION
 
 LABEL org.opencontainers.image.source="https://github.com/infocyph/docker-llm-ollama"
 LABEL org.opencontainers.image.description="Local small LLM runtime powered by Ollama"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.authors="infocyph,abmmhasan"
-LABEL org.opencontainers.image.version="${LLM_SM_VERSION}"
+LABEL org.opencontainers.image.version="${LLM_OLLAMA_VERSION}"
 
 ARG OLLAMA_MODEL=qwen3:14b
 
-ENV LLM_SM_VERSION=${LLM_SM_VERSION} \
+ENV LLM_OLLAMA_VERSION=${LLM_OLLAMA_VERSION} \
     OLLAMA_HOST=0.0.0.0:11434 \
     OLLAMA_NUM_PARALLEL=1 \
     OLLAMA_MAX_LOADED_MODELS=1 \
     OLLAMA_KEEP_ALIVE=5m \
     OLLAMA_NO_CLOUD=1 \
     OLLAMA_MODEL=${OLLAMA_MODEL} \
-    LLM_SM_IN_CONTAINER=1 \
-    LLM_SM_URL=http://127.0.0.1:11434
+    LLM_OLLAMA_IN_CONTAINER=1 \
+    LLM_OLLAMA_URL=http://127.0.0.1:11434
 
 RUN set -eu; \
     test -x /bin/ollama; \
@@ -33,13 +33,13 @@ RUN apt-get update \
     && command -v pdfinfo >/dev/null \
     && rm -rf /var/lib/apt/lists/*
 
-COPY scripts/llm-sm /usr/local/bin/llm-sm
-COPY scripts/lib /usr/local/lib/llm-sm/lib
-COPY scripts/commands /usr/local/lib/llm-sm/commands
-COPY scripts/prompts /usr/local/lib/llm-sm/prompts
+COPY scripts/llm-ollama /usr/local/bin/llm-ollama
+COPY scripts/lib /usr/local/lib/llm-ollama/lib
+COPY scripts/commands /usr/local/lib/llm-ollama/commands
+COPY scripts/prompts /usr/local/lib/llm-ollama/prompts
 
-RUN chmod 0755 /usr/local/bin/llm-sm \
-    && chmod -R a+rX /usr/local/lib/llm-sm
+RUN chmod 0755 /usr/local/bin/llm-ollama \
+    && chmod -R a+rX /usr/local/lib/llm-ollama
 
 # Bake the default model into the image so the container is immediately usable
 # without downloading model weights on first startup.
