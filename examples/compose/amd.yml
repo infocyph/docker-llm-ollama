@@ -1,6 +1,6 @@
 services:
   llm-sm:
-    image: ${LLM_SM_AMD_IMAGE:-infocyph/llm-sm:amd-latest}
+    image: ${LLM_SM_AMD_IMAGE:-infocyph/llm-ollama:amd-latest}
     restart: unless-stopped
     devices:
       - /dev/kfd:/dev/kfd
