@@ -1,13 +1,13 @@
 # 🤖 Local Small LLM Docker
 
-[![Docker Publish](https://github.com/infocyph/docker-llm-sm/actions/workflows/docker.publish.yml/badge.svg)](https://github.com/infocyph/docker-llm-sm/actions/workflows/docker.publish.yml)
-[![CLI Check](https://github.com/infocyph/docker-llm-sm/actions/workflows/cli.check.yml/badge.svg)](https://github.com/infocyph/docker-llm-sm/actions/workflows/cli.check.yml)
-![Docker Pulls](https://img.shields.io/docker/pulls/infocyph/llm-sm)
-![Docker Image Size](https://img.shields.io/docker/image-size/infocyph/llm-sm)
+[![Docker Publish](https://github.com/infocyph/docker-llm-ollama/actions/workflows/docker.publish.yml/badge.svg)](https://github.com/infocyph/docker-llm-ollama/actions/workflows/docker.publish.yml)
+[![CLI Check](https://github.com/infocyph/docker-llm-ollama/actions/workflows/cli.check.yml/badge.svg)](https://github.com/infocyph/docker-llm-ollama/actions/workflows/cli.check.yml)
+![Docker Pulls](https://img.shields.io/docker/pulls/infocyph/llm-ollama)
+![Docker Image Size](https://img.shields.io/docker/image-size/infocyph/llm-ollama)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Runtime: Ollama](https://img.shields.io/badge/Runtime-Ollama-black.svg)](https://ollama.com)
 
-`docker-llm-sm` is a small local Ollama provider/runtime with a bundled developer CLI and a baked default model.
+`docker-llm-ollama` is a small local Ollama provider/runtime with a bundled developer CLI and a baked default model.
 
 The image is intentionally provider-focused. It owns Ollama, model state, model-facing CLI commands and the local API. Container lifecycle, Nginx routing and higher-level AI features belong to Docker/Compose/LocalDevStack consumers.
 
@@ -32,15 +32,15 @@ The standard image uses `ollama/ollama:latest`. The AMD image uses `ollama/ollam
 Docker Hub:
 
 ```bash
-docker pull infocyph/llm-sm:latest
-docker pull infocyph/llm-sm:amd-latest
+docker pull infocyph/llm-ollama:latest
+docker pull infocyph/llm-ollama:amd-latest
 ```
 
 GHCR:
 
 ```bash
-docker pull ghcr.io/infocyph/llm-sm:latest
-docker pull ghcr.io/infocyph/llm-sm:amd-latest
+docker pull ghcr.io/infocyph/llm-ollama:latest
+docker pull ghcr.io/infocyph/llm-ollama:amd-latest
 ```
 
 Release tags are immutable. Moving `latest` / `amd-latest` tags are refreshed from the latest published stable GitHub release.
@@ -207,7 +207,7 @@ docker run -d \
   --restart unless-stopped \
   -p 127.0.0.1:11434:11434 \
   --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
-  infocyph/llm-sm:latest
+  infocyph/llm-ollama:latest
 ```
 
 NVIDIA adds:
@@ -216,7 +216,7 @@ NVIDIA adds:
 --gpus=all
 ```
 
-AMD uses `infocyph/llm-sm:amd-latest` plus:
+AMD uses `infocyph/llm-ollama:amd-latest` plus:
 
 ```text
 --device=/dev/kfd
@@ -233,7 +233,7 @@ docker run -d \
   --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
   --mount type=bind,src="$PWD",dst=/workspace,readonly \
   -w /workspace \
-  infocyph/llm-sm:latest
+  infocyph/llm-ollama:latest
 ```
 
 The explicit `--name llm-sm` is appropriate for this standalone `docker run` flow. Compose intentionally does not set `container_name`.
@@ -357,8 +357,8 @@ Standalone Compose reads normal Compose interpolation values from the shell and 
 
 | Setting | Default | Purpose |
 |---|---:|---|
-| `LLM_SM_IMAGE` | `infocyph/llm-sm:latest` | Standard image used by `compose.yml` / CPU / NVIDIA |
-| `LLM_SM_AMD_IMAGE` | `infocyph/llm-sm:amd-latest` | AMD/ROCm image |
+| `LLM_SM_IMAGE` | `infocyph/llm-ollama:latest` | Standard image used by `compose.yml` / CPU / NVIDIA |
+| `LLM_SM_AMD_IMAGE` | `infocyph/llm-ollama:amd-latest` | AMD/ROCm image |
 | `LLM_SM_VOLUME` | `llm-sm-data` | Persistent Ollama model volume name |
 | `LLM_SM_WORKSPACE` | `.` | Host workspace used only with `compose.workspace.yml` |
 | `LLM_SM_WORKSPACE_MODE` | `ro` | Workspace bind mode; use `rw` only deliberately |
