@@ -1,6 +1,6 @@
 services:
   llm-sm:
-    image: ${LLM_SM_IMAGE:-infocyph/llm-sm:latest}
+    image: ${LLM_SM_IMAGE:-infocyph/llm-ollama:latest}
     restart: unless-stopped
     ports:
       - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
