@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 ai_commit_prompt_file() {
-  printf '%s\n' "${LLM_SM_AI_COMMIT_PROMPT_FILE:-$LLM_SM_RUNTIME_ROOT/prompts/ai-commit.txt}"
+  printf '%s\n' "${LLM_OLLAMA_AI_COMMIT_PROMPT_FILE:-$LLM_OLLAMA_RUNTIME_ROOT/prompts/ai-commit.txt}"
 }
 
 load_ai_commit_prompt() {
