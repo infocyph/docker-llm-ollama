@@ -62,7 +62,7 @@ jobs:
           build-args: |
             OLLAMA_BASE_IMAGE=ollama/ollama:latest
             OLLAMA_MODEL=${{ inputs.model || 'qwen2.5:3b' }}
-            LLM_SM_VERSION=0.04
+            LLM_SM_VERSION=ci-${{ github.sha }}
           cache-from: type=gha,scope=runtime-standard
           cache-to: type=gha,mode=max,scope=runtime-standard
 
