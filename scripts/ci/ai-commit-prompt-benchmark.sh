@@ -4,7 +4,7 @@ set -Eeuo pipefail
 IMAGE="${1:-${LLM_SM_SMOKE_IMAGE:-llm-sm:runtime-smoke}}"
 CANDIDATE_PROMPT="${2:-}"
 RUNS="${LLM_SM_BENCHMARK_RUNS:-3}"
-MODEL="${OLLAMA_MODEL:-qwen2.5:3b}"
+MODEL="${OLLAMA_MODEL:-qwen3:14b}"
 name="llm-sm-prompt-bench-${GITHUB_RUN_ID:-local}-${RANDOM}"
 tmp="$(mktemp -d)"
 
