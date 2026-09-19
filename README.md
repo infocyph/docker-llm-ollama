@@ -438,12 +438,13 @@ The provider contract is:
 ```text
 service:  llm-ollama
 internal: http://llm-ollama:11434
-external: https://llm-ollama.localhost
+https:    https://llm-ollama.localhost
+native:   http://llm-ollama.localhost:11434
 ```
 
 Internal Docker consumers should use `http://llm-ollama:11434` directly. They should not route service-to-service traffic through Nginx.
 
-Nginx owns the optional user-facing HTTPS route. LocalDevStack can omit the direct host `11434` mapping entirely and expose only `443` while keeping `llm-ollama:11434` available on the internal network.
+Nginx owns both LocalDevStack host-facing routes: TLS on port `443` and a loopback-only native Ollama listener on port `11434`. The provider container itself remains internal and has no published host port in LocalDevStack.
 
 The broader stack must remain usable when `llm-ollama` is disabled or absent. Consumer-specific AI behavior belongs in those consumers, not in this image.
 
