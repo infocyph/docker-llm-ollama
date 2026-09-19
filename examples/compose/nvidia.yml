@@ -1,6 +1,6 @@
 services:
   llm-sm:
-    image: ${LLM_SM_IMAGE:-infocyph/llm-sm:latest}
+    image: ${LLM_SM_IMAGE:-infocyph/llm-ollama:latest}
     restart: unless-stopped
     gpus: all
     ports:
