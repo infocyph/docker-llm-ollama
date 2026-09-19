@@ -10,7 +10,7 @@ command_main() {
   fi
 
   model="$(resolve_model "$model")"
-  prompt="$(read_input "$@")" || die "Prompt required. Example: llm-sm ask \"Hello\""
+  prompt="$(read_input "$@")" || die "Prompt required. Example: llm-ollama ask \"Hello\""
   [[ -n "$prompt" ]] || die "Prompt cannot be empty"
 
   check_input_budget "Prompt input" "$prompt"
