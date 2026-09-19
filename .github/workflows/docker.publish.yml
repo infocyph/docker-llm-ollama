@@ -181,7 +181,7 @@ jobs:
           ollama_output="$(docker run --rm --entrypoint /bin/ollama "$CANDIDATE_IMAGE" --version)"
           cli_output="$(docker run --rm --entrypoint llm-sm "$CANDIDATE_IMAGE" version)"
           ollama_version="${ollama_output%%$'\n'*}"
-          cli_version="${cli_output%%'build-verified; runtime digest not queried on this variant'
+          cli_version="${cli_output%%
 
           if [[ '${{ matrix.runtime_smoke }}' == 'true' ]]; then
             name="llm-sm-meta-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
@@ -446,7 +446,6 @@ jobs:
           push: true
           build-args: |
             OLLAMA_BASE_IMAGE=${{ env.RESOLVED_OLLAMA_BASE_IMAGE }}
-            LLM_SM_VERSION=${{ env.RELEASE_TAG }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=publish-candidate-${{ matrix.variant }}
