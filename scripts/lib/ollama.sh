@@ -7,7 +7,7 @@ ollama_runtime() {
 require_ollama_runtime() {
   local bin
   bin="$(ollama_runtime)"
-  [[ -x "$bin" ]] || die "Ollama runtime is unavailable. Run llm-sm inside the published llm-sm container."
+  [[ -x "$bin" ]] || die "Ollama runtime is unavailable. Run llm-ollama inside the published llm-ollama container."
 }
 
 exec_ollama() {
@@ -27,7 +27,7 @@ model_available() {
 require_model() {
   local model="$1"
   require_ollama_runtime
-  model_available "$model" || die "Model '$model' is not installed. Run 'llm-sm pull $model' first."
+  model_available "$model" || die "Model '$model' is not installed. Run 'llm-ollama pull $model' first."
 }
 
 api_url() {
@@ -63,7 +63,7 @@ require_model_capability() {
 
   if ! jq -e --arg capability "$capability" '(.capabilities // []) | index($capability) != null' <<<"$info" >/dev/null; then
     if [[ "$capability" == "vision" ]]; then
-      die "Model '$model' does not expose vision capability. Select or pull a vision model, for example: llm-sm pull qwen2.5vl:3b"
+      die "Model '$model' does not expose vision capability. Select or pull a vision model, for example: llm-ollama pull qwen2.5vl:3b"
     fi
     die "Model '$model' does not expose required capability '$capability'"
   fi
