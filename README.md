@@ -23,7 +23,7 @@ The image is intentionally provider-focused. It owns Ollama, model state, model-
 | AMD image | separate ROCm `amd-*` tags |
 | Runtime privacy | `OLLAMA_NO_CLOUD=1` |
 | LocalDevStack internal URL | `http://llm-ollama:11434` |
-| LocalDevStack user URL | `https://llm.localhost` |
+| LocalDevStack user URL | `https://llm-ollama.localhost` |
 
 The standard image uses `ollama/ollama:latest`. The AMD image uses `ollama/ollama:rocm`. Publication resolves those moving upstream tags to a digest once per publish run so candidate validation and final publication use the same upstream bits.
 
@@ -438,7 +438,7 @@ The provider contract is:
 ```text
 service:  llm-ollama
 internal: http://llm-ollama:11434
-external: https://llm.localhost
+external: https://llm-ollama.localhost
 ```
 
 Internal Docker consumers should use `http://llm-ollama:11434` directly. They should not route service-to-service traffic through Nginx.
