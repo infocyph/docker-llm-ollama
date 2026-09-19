@@ -32,7 +32,7 @@ command_main() {
 
   require_command jq
   model="$(resolve_model "$model")"
-  prompt="$(read_input "$@")" || die "Prompt required. Example: llm-sm json \"Return name and version\""
+  prompt="$(read_input "$@")" || die "Prompt required. Example: llm-ollama json \"Return name and version\""
   [[ -n "$prompt" ]] || die "Prompt cannot be empty"
   check_input_budget "JSON prompt" "$prompt"
 
