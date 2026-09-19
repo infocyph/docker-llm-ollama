@@ -87,6 +87,37 @@ jobs:
             exit 1
           fi
 
+      - name: Validate attachment budget contracts
+        run: |
+          core="$PWD/scripts/lib/core.sh"
+          first="$(mktemp)"
+          second="$(mktemp)"
+          trap 'rm -f "$first" "$second"' EXIT
+          printf '12345' > "$first"
+          printf '67890' > "$second"
+
+          if LLM_SM_ATTACHMENT_MAX_BYTES=4 LLM_SM_ATTACHMENTS_MAX_BYTES=0 LLM_SM_ATTACHMENT_MAX_COUNT=0 \
+              bash -c 'source "$1"; check_attachment_set test "$2"' _ "$core" "$first"; then
+            echo 'Oversized single attachment unexpectedly passed.' >&2
+            exit 1
+          fi
+
+          if LLM_SM_ATTACHMENT_MAX_BYTES=0 LLM_SM_ATTACHMENTS_MAX_BYTES=8 LLM_SM_ATTACHMENT_MAX_COUNT=0 \
+              bash -c 'source "$1"; check_attachment_set test "$2" "$3"' _ "$core" "$first" "$second"; then
+            echo 'Oversized aggregate attachments unexpectedly passed.' >&2
+            exit 1
+          fi
+
+          if LLM_SM_ATTACHMENT_MAX_BYTES=0 LLM_SM_ATTACHMENTS_MAX_BYTES=0 LLM_SM_ATTACHMENT_MAX_COUNT=1 \
+              bash -c 'source "$1"; check_attachment_set test "$2" "$3"' _ "$core" "$first" "$second"; then
+            echo 'Attachment count overflow unexpectedly passed.' >&2
+            exit 1
+          fi
+
+          LLM_SM_ATTACHMENT_MAX_BYTES=4 LLM_SM_ATTACHMENTS_MAX_BYTES=8 LLM_SM_ATTACHMENT_MAX_COUNT=1 \
+            LLM_SM_ALLOW_LARGE_INPUT=1 \
+            bash -c 'source "$1"; check_attachment_set test "$2" "$3"' _ "$core" "$first" "$second"
+
       - name: Validate Compose contracts
         run: |
           for file in \
@@ -104,6 +135,9 @@ jobs:
           done
 
           docker compose -f compose.yml config --volumes | grep -qx llm-sm-data
+          compose_json="$(docker compose -f compose.yml config --format json)"
+          jq -e '.services["llm-sm"].environment.LLM_SM_ATTACHMENT_MAX_BYTES == "16777216"' <<< "$compose_json" >/dev/null
+          jq -e '.services["llm-sm"].environment.LLM_SM_PDF_MAX_PAGES == "24"' <<< "$compose_json" >/dev/null
           LLM_SM_VOLUME=llm-sm-isolated docker compose -f compose.yml config \
             | grep -q 'name: llm-sm-isolated'
 
