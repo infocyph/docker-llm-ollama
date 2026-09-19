@@ -227,7 +227,7 @@ Model:     models, ps, run, show, pull, rm, unload
 Low level: ollama, api, version
 ```
 
-With Compose:
+With the standalone Compose files in this repository:
 
 ```bash
 docker compose exec llm-sm llm-sm help
@@ -235,6 +235,17 @@ docker compose exec llm-sm llm-sm version
 docker compose exec llm-sm llm-sm models
 docker compose exec llm-sm llm-sm ask "Explain dependency injection briefly"
 ```
+
+These bare `docker compose ...` commands require this repository's `compose.yml` in the current Compose context. Inside LocalDevStack, use its wrapper because LocalDevStack assembles Compose from its own files, env files, and runtime overrides:
+
+```bash
+lds llm help
+lds llm version
+lds llm models
+lds llm ask "Explain dependency injection briefly"
+```
+
+Running bare `docker compose exec llm-sm ...` from the LocalDevStack repository root fails with `no configuration file provided: not found` before the container CLI is invoked.
 
 Model management is explicit:
 
@@ -326,6 +337,10 @@ Defaults:
 ```text
 LLM_SM_INPUT_WARN_BYTES=1048576
 LLM_SM_INPUT_MAX_BYTES=0
+LLM_SM_ATTACHMENT_MAX_BYTES=16777216
+LLM_SM_ATTACHMENTS_MAX_BYTES=33554432
+LLM_SM_ATTACHMENT_MAX_COUNT=16
+LLM_SM_PDF_MAX_PAGES=24
 ```
 
 `LLM_SM_INPUT_MAX_BYTES=0` means no CLI hard ceiling. The effective useful size is still bounded by the selected model's context window, Ollama/runtime memory and available host RAM/VRAM.
