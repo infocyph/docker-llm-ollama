@@ -61,6 +61,9 @@ command_main() {
   done
 
   model="$(resolve_model "$model")"
+  local -a source_attachments=("${files[@]}" "${images[@]}" "${pdfs[@]}" "${pdf_vision[@]}")
+  check_attachment_set "Prompt attachments" "${source_attachments[@]}"
+  check_pdf_vision_pages "${pdf_vision[@]}"
   input="${*:-}"
   stdin_data="$(read_stdin_if_piped)"
   file_data="$(file_context "${files[@]}")"
