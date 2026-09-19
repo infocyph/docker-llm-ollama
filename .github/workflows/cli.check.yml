@@ -114,6 +114,9 @@ jobs:
             exit 1
           fi
 
+          LLM_SM_ATTACHMENT_MAX_BYTES=0 LLM_SM_ATTACHMENTS_MAX_BYTES=0 LLM_SM_ATTACHMENT_MAX_COUNT=1 \
+            bash -c 'source "$1"; check_attachment_bytes_set payload "$2" "$3"' _ "$core" "$first" "$second"
+
           LLM_SM_ATTACHMENT_MAX_BYTES=4 LLM_SM_ATTACHMENTS_MAX_BYTES=8 LLM_SM_ATTACHMENT_MAX_COUNT=1 \
             LLM_SM_ALLOW_LARGE_INPUT=1 \
             bash -c 'source "$1"; check_attachment_set test "$2" "$3"' _ "$core" "$first" "$second"
