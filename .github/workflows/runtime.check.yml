@@ -58,15 +58,15 @@ jobs:
         with:
           context: .
           load: true
-          tags: llm-sm:runtime-smoke
+          tags: llm-ollama:runtime-smoke
           build-args: |
             OLLAMA_BASE_IMAGE=ollama/ollama:latest
             OLLAMA_MODEL=${{ inputs.model || 'qwen3:14b' }}
-            LLM_SM_VERSION=ci-${{ github.sha }}
+            LLM_OLLAMA_VERSION=ci-${{ github.sha }}
           cache-from: type=gha,scope=runtime-standard
           cache-to: type=gha,mode=max,scope=runtime-standard
 
       - name: Run runtime smoke
         env:
           OLLAMA_MODEL: ${{ inputs.model || 'qwen3:14b' }}
-        run: scripts/ci/runtime-smoke.sh llm-sm:runtime-smoke
+        run: scripts/ci/runtime-smoke.sh llm-ollama:runtime-smoke
