@@ -3,7 +3,7 @@ FROM ${OLLAMA_BASE_IMAGE}
 
 ARG LLM_SM_VERSION
 
-LABEL org.opencontainers.image.source="https://github.com/infocyph/docker-llm-sm"
+LABEL org.opencontainers.image.source="https://github.com/infocyph/docker-llm-ollama"
 LABEL org.opencontainers.image.description="Local small LLM runtime powered by Ollama"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.authors="infocyph,abmmhasan"
