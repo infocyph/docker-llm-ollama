@@ -368,7 +368,7 @@ Standalone Compose reads normal Compose interpolation values from the shell and 
 | `LLM_SM_INPUT_MAX_BYTES` | `0` | Hard text/diff ceiling; `0` disables it |
 | `LLM_SM_ATTACHMENT_MAX_BYTES` | `16777216` | Per attachment/source-file limit |
 | `LLM_SM_ATTACHMENTS_MAX_BYTES` | `33554432` | Aggregate source-attachment limit |
-| `LLM_SM_ATTACHMENT_MAX_COUNT` | `16` | Maximum attachments in one request |
+| `LLM_SM_ATTACHMENT_MAX_COUNT` | `16` | Maximum source attachments in one request; rendered PDF pages use the separate page limit |
 | `LLM_SM_PDF_MAX_PAGES` | `24` | Maximum total pages rendered by `--pdf-vision` |
 | `LLM_SM_PDF_DPI` | `120` | PDF-to-image render DPI |
 | `LLM_SM_ALLOW_LARGE_INPUT` | `0` | Explicitly bypass configured input/attachment/page ceilings when set to `1` |
@@ -397,7 +397,7 @@ LLM_SM_ATTACHMENT_MAX_COUNT=16
 LLM_SM_PDF_MAX_PAGES=24
 ```
 
-`LLM_SM_INPUT_MAX_BYTES=0` means no text/diff hard ceiling. Attachment and PDF page limits remain active unless their individual setting is set to `0`. The effective useful size is still bounded by the selected model's context window, Ollama/runtime memory and available host RAM/VRAM.
+`LLM_SM_INPUT_MAX_BYTES=0` means no text/diff hard ceiling. Source-attachment byte/count limits and the PDF page limit remain active unless their individual setting is set to `0`. The effective useful size is still bounded by the selected model's context window, Ollama/runtime memory and available host RAM/VRAM.
 
 To impose a local policy ceiling, set a non-zero maximum:
 
