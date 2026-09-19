@@ -1,14 +1,18 @@
 ARG OLLAMA_BASE_IMAGE=ollama/ollama:latest
 FROM ${OLLAMA_BASE_IMAGE}
 
+ARG LLM_SM_VERSION
+
 LABEL org.opencontainers.image.source="https://github.com/infocyph/docker-llm-sm"
 LABEL org.opencontainers.image.description="Local small LLM runtime powered by Ollama"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.authors="infocyph,abmmhasan"
+LABEL org.opencontainers.image.version="${LLM_SM_VERSION}"
 
 ARG OLLAMA_MODEL=qwen2.5:3b
 
-ENV OLLAMA_HOST=0.0.0.0:11434 \
+ENV LLM_SM_VERSION=${LLM_SM_VERSION} \
+    OLLAMA_HOST=0.0.0.0:11434 \
     OLLAMA_NUM_PARALLEL=1 \
     OLLAMA_MAX_LOADED_MODELS=1 \
     OLLAMA_KEEP_ALIVE=5m \
@@ -26,6 +30,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl git jq poppler-utils \
     && command -v pdftotext >/dev/null \
     && command -v pdftoppm >/dev/null \
+    && command -v pdfinfo >/dev/null \
     && rm -rf /var/lib/apt/lists/*
 
 COPY scripts/llm-sm /usr/local/bin/llm-sm

@@ -18,6 +18,7 @@ validate_image_file() {
 
   [[ -f "$file" ]] || die "Image file not found: $file"
   [[ -s "$file" ]] || die "Image file is empty: $file"
+  check_attachment_set "Image attachment" "$file"
 
   case "$lower" in
     *.png|*.jpg|*.jpeg|*.webp) ;;
@@ -28,6 +29,7 @@ validate_image_file() {
 pdf_text_context() {
   (( $# > 0 )) || return 0
   require_command pdftotext
+  check_attachment_set "PDF text attachments" "$@"
 
   local file text first=1
   for file in "$@"; do
@@ -49,6 +51,30 @@ pdf_text_context() {
   done
 }
 
+pdf_page_count() {
+  require_command pdfinfo
+  local file="$1" pages
+  [[ -f "$file" ]] || die "PDF file not found: $file"
+  [[ -s "$file" ]] || die "PDF file is empty: $file"
+  pages="$(LC_ALL=C pdfinfo "$file" 2>/dev/null | awk -F: '/^Pages:/ {gsub(/[[:space:]]/, "", $2); print $2; exit}')"
+  [[ "$pages" =~ ^[1-9][0-9]*$ ]] || die "Unable to determine PDF page count: $file"
+  printf '%s\n' "$pages"
+}
+
+check_pdf_vision_pages() {
+  (( $# > 0 )) || return 0
+  validate_attachment_limits
+  local max_pages="${LLM_SM_PDF_MAX_PAGES:-$DEFAULT_PDF_MAX_PAGES}"
+  local file pages total_pages=0
+  for file in "$@"; do
+    pages="$(pdf_page_count "$file")"
+    total_pages=$((total_pages + pages))
+  done
+  if (( max_pages > 0 && total_pages > max_pages )) && ! large_input_allowed; then
+    die "PDF vision input has ${total_pages} pages; page limit is ${max_pages}. Raise LLM_SM_PDF_MAX_PAGES, set it to 0, or use LLM_SM_ALLOW_LARGE_INPUT=1 deliberately."
+  fi
+}
+
 render_pdf_pages() {
   require_command pdftoppm
 
@@ -60,6 +86,8 @@ render_pdf_pages() {
 
   [[ -f "$file" ]] || die "PDF file not found: $file"
   [[ -s "$file" ]] || die "PDF file is empty: $file"
+  check_attachment_set "PDF vision attachment" "$file"
+  check_pdf_vision_pages "$file"
   [[ "$dpi" =~ ^[1-9][0-9]*$ ]] || die "LLM_SM_PDF_DPI must be a positive integer"
 
   mkdir -p "$out_dir"

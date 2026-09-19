@@ -2,11 +2,15 @@
 
 # Shared by dynamically loaded command modules.
 # shellcheck disable=SC2034
-VERSION="0.4.0"
+VERSION="${LLM_SM_VERSION:-dev}"
 API_URL="${LLM_SM_URL:-http://127.0.0.1:11434}"
 DEFAULT_MODEL_FALLBACK="qwen2.5:3b"
 DEFAULT_INPUT_WARN_BYTES=1048576
 DEFAULT_INPUT_MAX_BYTES=0
+DEFAULT_ATTACHMENT_MAX_BYTES=16777216
+DEFAULT_ATTACHMENTS_MAX_BYTES=33554432
+DEFAULT_ATTACHMENT_MAX_COUNT=16
+DEFAULT_PDF_MAX_PAGES=24
 
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   BOLD=$'\033[1m'
@@ -82,6 +86,62 @@ check_file_budget() {
   check_input_bytes "$label" "$bytes"
 }
 
+large_input_allowed() {
+  [[ "${LLM_SM_ALLOW_LARGE_INPUT:-0}" == "1" ]]
+}
+
+validate_attachment_limits() {
+  local max_bytes="${LLM_SM_ATTACHMENT_MAX_BYTES:-$DEFAULT_ATTACHMENT_MAX_BYTES}"
+  local total_max_bytes="${LLM_SM_ATTACHMENTS_MAX_BYTES:-$DEFAULT_ATTACHMENTS_MAX_BYTES}"
+  local max_count="${LLM_SM_ATTACHMENT_MAX_COUNT:-$DEFAULT_ATTACHMENT_MAX_COUNT}"
+  local max_pages="${LLM_SM_PDF_MAX_PAGES:-$DEFAULT_PDF_MAX_PAGES}"
+
+  [[ "$max_bytes" =~ ^[0-9]+$ ]] || die "LLM_SM_ATTACHMENT_MAX_BYTES must be a non-negative integer"
+  [[ "$total_max_bytes" =~ ^[0-9]+$ ]] || die "LLM_SM_ATTACHMENTS_MAX_BYTES must be a non-negative integer"
+  [[ "$max_count" =~ ^[0-9]+$ ]] || die "LLM_SM_ATTACHMENT_MAX_COUNT must be a non-negative integer"
+  [[ "$max_pages" =~ ^[0-9]+$ ]] || die "LLM_SM_PDF_MAX_PAGES must be a non-negative integer"
+}
+
+check_attachment_bytes_set() {
+  local label="$1"
+  shift
+  (( $# > 0 )) || return 0
+
+  validate_attachment_limits
+  local max_bytes="${LLM_SM_ATTACHMENT_MAX_BYTES:-$DEFAULT_ATTACHMENT_MAX_BYTES}"
+  local total_max_bytes="${LLM_SM_ATTACHMENTS_MAX_BYTES:-$DEFAULT_ATTACHMENTS_MAX_BYTES}"
+  local file bytes total_bytes=0
+
+  for file in "$@"; do
+    [[ -f "$file" ]] || die "Attachment file not found: $file"
+    bytes="$(LC_ALL=C wc -c < "$file" | tr -d '[:space:]')"
+    [[ "$bytes" =~ ^[0-9]+$ ]] || die "Unable to determine attachment size: $file"
+    if (( max_bytes > 0 && bytes > max_bytes )) && ! large_input_allowed; then
+      die "$label file '$file' is ${bytes} bytes; per-file limit is ${max_bytes}. Raise LLM_SM_ATTACHMENT_MAX_BYTES, set it to 0, or use LLM_SM_ALLOW_LARGE_INPUT=1 deliberately."
+    fi
+    total_bytes=$((total_bytes + bytes))
+  done
+
+  if (( total_max_bytes > 0 && total_bytes > total_max_bytes )) && ! large_input_allowed; then
+    die "$label totals ${total_bytes} bytes; aggregate limit is ${total_max_bytes}. Raise LLM_SM_ATTACHMENTS_MAX_BYTES, set it to 0, or use LLM_SM_ALLOW_LARGE_INPUT=1 deliberately."
+  fi
+}
+
+check_attachment_set() {
+  local label="$1"
+  shift
+  (( $# > 0 )) || return 0
+
+  validate_attachment_limits
+  local max_count="${LLM_SM_ATTACHMENT_MAX_COUNT:-$DEFAULT_ATTACHMENT_MAX_COUNT}"
+
+  if (( max_count > 0 && $# > max_count )) && ! large_input_allowed; then
+    die "$label has $# files; attachment-count limit is $max_count. Reduce the request, raise LLM_SM_ATTACHMENT_MAX_COUNT, set it to 0, or use LLM_SM_ALLOW_LARGE_INPUT=1 deliberately."
+  fi
+
+  check_attachment_bytes_set "$label" "$@"
+}
+
 read_input() {
   if [[ $# -gt 0 ]]; then
     printf '%s\n' "$*"
@@ -100,6 +160,8 @@ read_stdin_if_piped() {
 
 file_context() {
   local file first=1
+
+  check_attachment_set "File context" "$@"
 
   for file in "$@"; do
     [[ -f "$file" ]] || die "File not found: $file"

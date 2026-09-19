@@ -161,6 +161,7 @@ jobs:
           tags: llm-sm:publish-candidate-${{ matrix.variant }}
           build-args: |
             OLLAMA_BASE_IMAGE=${{ env.RESOLVED_OLLAMA_BASE_IMAGE }}
+            LLM_SM_VERSION=${{ env.RELEASE_TAG }}
           cache-from: type=gha,scope=publish-candidate-${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=publish-candidate-${{ matrix.variant }}
           provenance: false
@@ -181,6 +182,10 @@ jobs:
           cli_output="$(docker run --rm --entrypoint llm-sm "$CANDIDATE_IMAGE" version)"
           ollama_version="${ollama_output%%$'\n'*}"
           cli_version="${cli_output%%$'\n'*}"
+          [[ "$cli_version" == "llm-sm $RELEASE_TAG" ]] || {
+            echo "CLI version mismatch: expected 'llm-sm $RELEASE_TAG', got '$cli_version'." >&2
+            exit 1
+          }
           model_digest='build-verified; runtime digest not queried on this variant'
 
           if [[ '${{ matrix.runtime_smoke }}' == 'true' ]]; then
@@ -266,6 +271,7 @@ jobs:
           push: true
           build-args: |
             OLLAMA_BASE_IMAGE=${{ env.RESOLVED_OLLAMA_BASE_IMAGE }}
+            LLM_SM_VERSION=${{ env.RELEASE_TAG }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=publish-candidate-${{ matrix.variant }}

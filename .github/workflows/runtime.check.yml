@@ -1,6 +1,23 @@
 name: Runtime Check
 
 on:
+  pull_request:
+    paths:
+      - Dockerfile
+      - 'scripts/**'
+      - 'compose*.yml'
+      - 'examples/compose/**'
+      - .github/workflows/runtime.check.yml
+      - .github/workflows/docker.publish.yml
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - 'scripts/**'
+      - 'compose*.yml'
+      - 'examples/compose/**'
+      - .github/workflows/runtime.check.yml
+      - .github/workflows/docker.publish.yml
   workflow_dispatch:
     inputs:
       model:
@@ -45,6 +62,7 @@ jobs:
           build-args: |
             OLLAMA_BASE_IMAGE=ollama/ollama:latest
             OLLAMA_MODEL=${{ inputs.model || 'qwen2.5:3b' }}
+            LLM_SM_VERSION=ci-${{ github.sha }}
           cache-from: type=gha,scope=runtime-standard
           cache-to: type=gha,mode=max,scope=runtime-standard
 
