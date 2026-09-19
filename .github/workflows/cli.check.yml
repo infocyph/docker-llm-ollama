@@ -186,7 +186,7 @@ jobs:
           ./scripts/llm-sm ai-commit --help >/dev/null
           test "$(./scripts/llm-sm version | head -n 1)" = "llm-sm $expected_version"
           test "$(./scripts/llm-sm -v | head -n 1)" = "llm-sm $expected_version"
-          test "$(LLM_SM_VERSION=9.9 ./scripts/llm-sm version | head -n 1)" = "llm-sm 9.9"
+          test "$(LLM_SM_VERSION=test-build ./scripts/llm-sm version | head -n 1)" = "llm-sm test-build"
           ./scripts/llm-sm -h >/dev/null
           test -s scripts/prompts/ai-commit.txt
 
