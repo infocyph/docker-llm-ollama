@@ -9,7 +9,7 @@ LABEL org.opencontainers.image.licenses="MIT"
 LABEL org.opencontainers.image.authors="infocyph,abmmhasan"
 LABEL org.opencontainers.image.version="${LLM_SM_VERSION}"
 
-ARG OLLAMA_MODEL=qwen2.5:3b
+ARG OLLAMA_MODEL=qwen3:14b
 
 ENV LLM_SM_VERSION=${LLM_SM_VERSION} \
     OLLAMA_HOST=0.0.0.0:11434 \
