@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
 # shellcheck source=/dev/null
-source "$LLM_SM_RUNTIME_ROOT/lib/attachments.sh"
+source "$LLM_OLLAMA_RUNTIME_ROOT/lib/attachments.sh"
 
 command_main() {
   local model="" system input stdin_data file_data pdf_data attachment_tmp rendered kind
   local -a files=() images=() pdfs=() pdf_vision=() rendered_pages=()
-  system="${LLM_SM_SYSTEM:-}"
+  system="${LLM_OLLAMA_SYSTEM:-}"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in

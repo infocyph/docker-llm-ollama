@@ -20,15 +20,15 @@ jobs:
 
       - name: Validate CLI
         run: |
-          bash -n scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh scripts/ci/*.sh
-          shellcheck -x scripts/llm-sm scripts/lib/*.sh scripts/commands/*.sh scripts/ci/*.sh
+          bash -n scripts/llm-ollama scripts/lib/*.sh scripts/commands/*.sh scripts/ci/*.sh
+          shellcheck -x scripts/llm-ollama scripts/lib/*.sh scripts/commands/*.sh scripts/ci/*.sh
 
           for retired in start stop restart status logs install uninstall; do
             test ! -e "scripts/commands/${retired}.sh"
           done
           test ! -e scripts/lib/docker.sh
 
-          if grep -R -nE 'docker (inspect|exec|start|stop|restart|logs)|container_model|container_running|require_container|require_running' scripts/llm-sm scripts/lib scripts/commands; then
+          if grep -R -nE 'docker (inspect|exec|start|stop|restart|logs)|container_model|container_running|require_container|require_running' scripts/llm-ollama scripts/lib scripts/commands; then
             echo 'Host-side Docker lifecycle logic must not exist in the bundled CLI.' >&2
             exit 1
           fi
@@ -39,7 +39,7 @@ jobs:
             <(printf '%s\n' ai-commit api ask chat code help json models ollama prompt ps pull review rm run show unload version | sort) \
             <(find scripts/commands -maxdepth 1 -type f -name '*.sh' -printf '%f\n' | sed 's/\.sh$//' | sort)
 
-          help_output="$(./scripts/llm-sm help)"
+          help_output="$(./scripts/llm-ollama help)"
           for command in ai-commit api ask chat code json models ollama prompt ps pull review rm run show unload version; do
             grep -Eq "^  ${command}[[:space:]]" <<< "$help_output"
           done
@@ -49,39 +49,39 @@ jobs:
           core="$PWD/scripts/lib/core.sh"
           ollama="$PWD/scripts/lib/ollama.sh"
 
-          test "$(LLM_SM_MODEL=env-model OLLAMA_MODEL=runtime-model bash -c 'source "$1"; resolve_model explicit-model' _ "$core")" = explicit-model
-          test "$(LLM_SM_MODEL=env-model OLLAMA_MODEL=runtime-model bash -c 'source "$1"; resolve_model' _ "$core")" = env-model
-          test "$(env -u LLM_SM_MODEL OLLAMA_MODEL=runtime-model bash -c 'source "$1"; resolve_model' _ "$core")" = runtime-model
-          test "$(env -u LLM_SM_MODEL -u OLLAMA_MODEL bash -c 'source "$1"; resolve_model' _ "$core")" = qwen2.5:3b
+          test "$(LLM_OLLAMA_MODEL=env-model OLLAMA_MODEL=runtime-model bash -c 'source "$1"; resolve_model explicit-model' _ "$core")" = explicit-model
+          test "$(LLM_OLLAMA_MODEL=env-model OLLAMA_MODEL=runtime-model bash -c 'source "$1"; resolve_model' _ "$core")" = env-model
+          test "$(env -u LLM_OLLAMA_MODEL OLLAMA_MODEL=runtime-model bash -c 'source "$1"; resolve_model' _ "$core")" = runtime-model
+          test "$(env -u LLM_OLLAMA_MODEL -u OLLAMA_MODEL bash -c 'source "$1"; resolve_model' _ "$core")" = qwen3:14b
 
           bash -c 'source "$1"; source "$2"; build_generate_payload "test-model" "hello\nworld" "{\"type\":\"object\"}"' _ "$core" "$ollama" \
             | jq -e '.model == "test-model" and .stream == false and .format.type == "object"' >/dev/null
 
           bad_schema="$(mktemp)"
           printf '{bad\n' > "$bad_schema"
-          if ./scripts/llm-sm json --schema "$bad_schema" test >/tmp/llm-sm-json.out 2>/tmp/llm-sm-json.err; then
+          if ./scripts/llm-ollama json --schema "$bad_schema" test >/tmp/llm-ollama-json.out 2>/tmp/llm-ollama-json.err; then
             echo 'Malformed schema unexpectedly succeeded.' >&2
             exit 1
           fi
-          grep -q 'Schema file is not valid JSON' /tmp/llm-sm-json.err
+          grep -q 'Schema file is not valid JSON' /tmp/llm-ollama-json.err
 
       - name: Validate input budget contracts
         run: |
           core="$PWD/scripts/lib/core.sh"
 
-          LLM_SM_INPUT_WARN_BYTES=4 LLM_SM_INPUT_MAX_BYTES=8 \
+          LLM_OLLAMA_INPUT_WARN_BYTES=4 LLM_OLLAMA_INPUT_MAX_BYTES=8 \
             bash -c 'source "$1"; check_input_budget test 1234' _ "$core"
 
-          if LLM_SM_INPUT_WARN_BYTES=4 LLM_SM_INPUT_MAX_BYTES=8 \
+          if LLM_OLLAMA_INPUT_WARN_BYTES=4 LLM_OLLAMA_INPUT_MAX_BYTES=8 \
               bash -c 'source "$1"; check_input_budget test 123456789' _ "$core"; then
             echo 'Oversized input unexpectedly passed.' >&2
             exit 1
           fi
 
-          LLM_SM_INPUT_WARN_BYTES=4 LLM_SM_INPUT_MAX_BYTES=8 LLM_SM_ALLOW_LARGE_INPUT=1 \
+          LLM_OLLAMA_INPUT_WARN_BYTES=4 LLM_OLLAMA_INPUT_MAX_BYTES=8 LLM_OLLAMA_ALLOW_LARGE_INPUT=1 \
             bash -c 'source "$1"; check_input_budget test 123456789' _ "$core"
 
-          if LLM_SM_INPUT_WARN_BYTES=9 LLM_SM_INPUT_MAX_BYTES=8 \
+          if LLM_OLLAMA_INPUT_WARN_BYTES=9 LLM_OLLAMA_INPUT_MAX_BYTES=8 \
               bash -c 'source "$1"; check_input_budget test 1' _ "$core"; then
             echo 'Invalid input-limit configuration unexpectedly passed.' >&2
             exit 1
@@ -96,29 +96,29 @@ jobs:
           printf '12345' > "$first"
           printf '67890' > "$second"
 
-          if LLM_SM_ATTACHMENT_MAX_BYTES=4 LLM_SM_ATTACHMENTS_MAX_BYTES=0 LLM_SM_ATTACHMENT_MAX_COUNT=0 \
+          if LLM_OLLAMA_ATTACHMENT_MAX_BYTES=4 LLM_OLLAMA_ATTACHMENTS_MAX_BYTES=0 LLM_OLLAMA_ATTACHMENT_MAX_COUNT=0 \
               bash -c 'source "$1"; check_attachment_set test "$2"' _ "$core" "$first"; then
             echo 'Oversized single attachment unexpectedly passed.' >&2
             exit 1
           fi
 
-          if LLM_SM_ATTACHMENT_MAX_BYTES=0 LLM_SM_ATTACHMENTS_MAX_BYTES=8 LLM_SM_ATTACHMENT_MAX_COUNT=0 \
+          if LLM_OLLAMA_ATTACHMENT_MAX_BYTES=0 LLM_OLLAMA_ATTACHMENTS_MAX_BYTES=8 LLM_OLLAMA_ATTACHMENT_MAX_COUNT=0 \
               bash -c 'source "$1"; check_attachment_set test "$2" "$3"' _ "$core" "$first" "$second"; then
             echo 'Oversized aggregate attachments unexpectedly passed.' >&2
             exit 1
           fi
 
-          if LLM_SM_ATTACHMENT_MAX_BYTES=0 LLM_SM_ATTACHMENTS_MAX_BYTES=0 LLM_SM_ATTACHMENT_MAX_COUNT=1 \
+          if LLM_OLLAMA_ATTACHMENT_MAX_BYTES=0 LLM_OLLAMA_ATTACHMENTS_MAX_BYTES=0 LLM_OLLAMA_ATTACHMENT_MAX_COUNT=1 \
               bash -c 'source "$1"; check_attachment_set test "$2" "$3"' _ "$core" "$first" "$second"; then
             echo 'Attachment count overflow unexpectedly passed.' >&2
             exit 1
           fi
 
-          LLM_SM_ATTACHMENT_MAX_BYTES=0 LLM_SM_ATTACHMENTS_MAX_BYTES=0 LLM_SM_ATTACHMENT_MAX_COUNT=1 \
+          LLM_OLLAMA_ATTACHMENT_MAX_BYTES=0 LLM_OLLAMA_ATTACHMENTS_MAX_BYTES=0 LLM_OLLAMA_ATTACHMENT_MAX_COUNT=1 \
             bash -c 'source "$1"; check_attachment_bytes_set payload "$2" "$3"' _ "$core" "$first" "$second"
 
-          LLM_SM_ATTACHMENT_MAX_BYTES=4 LLM_SM_ATTACHMENTS_MAX_BYTES=8 LLM_SM_ATTACHMENT_MAX_COUNT=1 \
-            LLM_SM_ALLOW_LARGE_INPUT=1 \
+          LLM_OLLAMA_ATTACHMENT_MAX_BYTES=4 LLM_OLLAMA_ATTACHMENTS_MAX_BYTES=8 LLM_OLLAMA_ATTACHMENT_MAX_COUNT=1 \
+            LLM_OLLAMA_ALLOW_LARGE_INPUT=1 \
             bash -c 'source "$1"; check_attachment_set test "$2" "$3"' _ "$core" "$first" "$second"
 
       - name: Validate Compose contracts
@@ -129,7 +129,7 @@ jobs:
             examples/compose/nvidia.yml \
             examples/compose/amd.yml; do
             docker compose -f "$file" config >/dev/null
-            docker compose -f "$file" config --services | grep -qx llm-sm
+            docker compose -f "$file" config --services | grep -qx llm-ollama
 
             if grep -qE '^[[:space:]]*container_name:' "$file"; then
               echo "Fixed container_name is not allowed in $file." >&2
@@ -137,20 +137,20 @@ jobs:
             fi
           done
 
-          docker compose -f compose.yml config --volumes | grep -qx llm-sm-data
+          docker compose -f compose.yml config --volumes | grep -qx llm-ollama-data
           compose_json="$(docker compose -f compose.yml config --format json)"
-          jq -e '.services["llm-sm"].environment.LLM_SM_ATTACHMENT_MAX_BYTES == "16777216"' <<< "$compose_json" >/dev/null
-          jq -e '.services["llm-sm"].environment.LLM_SM_PDF_MAX_PAGES == "24"' <<< "$compose_json" >/dev/null
-          LLM_SM_VOLUME=llm-sm-isolated docker compose -f compose.yml config \
-            | grep -q 'name: llm-sm-isolated'
+          jq -e '.services["llm-ollama"].environment.LLM_OLLAMA_ATTACHMENT_MAX_BYTES == "16777216"' <<< "$compose_json" >/dev/null
+          jq -e '.services["llm-ollama"].environment.LLM_OLLAMA_PDF_MAX_PAGES == "24"' <<< "$compose_json" >/dev/null
+          LLM_OLLAMA_VOLUME=llm-ollama-isolated docker compose -f compose.yml config \
+            | grep -q 'name: llm-ollama-isolated'
 
-          workspace_json="$(LLM_SM_WORKSPACE="$PWD" docker compose -f compose.yml -f compose.workspace.yml config --format json)"
-          jq -e '.services["llm-sm"].working_dir == "/workspace"' <<< "$workspace_json" >/dev/null
-          jq -e '.services["llm-sm"].volumes | any(.target == "/workspace" and .read_only == true)' <<< "$workspace_json" >/dev/null
-          jq -e '.services["llm-sm"].volumes | any(.target == "/root/.ollama")' <<< "$workspace_json" >/dev/null
+          workspace_json="$(LLM_OLLAMA_WORKSPACE="$PWD" docker compose -f compose.yml -f compose.workspace.yml config --format json)"
+          jq -e '.services["llm-ollama"].working_dir == "/workspace"' <<< "$workspace_json" >/dev/null
+          jq -e '.services["llm-ollama"].volumes | any(.target == "/workspace" and .read_only == true)' <<< "$workspace_json" >/dev/null
+          jq -e '.services["llm-ollama"].volumes | any(.target == "/root/.ollama")' <<< "$workspace_json" >/dev/null
 
-          workspace_rw_json="$(LLM_SM_WORKSPACE="$PWD" LLM_SM_WORKSPACE_MODE=rw docker compose -f compose.yml -f compose.workspace.yml config --format json)"
-          jq -e '.services["llm-sm"].volumes | any(.target == "/workspace" and ((.read_only // false) == false))' <<< "$workspace_rw_json" >/dev/null
+          workspace_rw_json="$(LLM_OLLAMA_WORKSPACE="$PWD" LLM_OLLAMA_WORKSPACE_MODE=rw docker compose -f compose.yml -f compose.workspace.yml config --format json)"
+          jq -e '.services["llm-ollama"].volumes | any(.target == "/workspace" and ((.read_only // false) == false))' <<< "$workspace_rw_json" >/dev/null
 
       - name: Validate publication policy
         run: |
@@ -185,24 +185,24 @@ jobs:
           expected_version="$(bash -c 'source "$1"; printf "%s" "$VERSION"' _ "$PWD/scripts/lib/core.sh")"
           test -n "$expected_version"
 
-          ./scripts/llm-sm help >/dev/null
-          ./scripts/llm-sm ai-commit --help >/dev/null
-          test "$(./scripts/llm-sm version | head -n 1)" = "llm-sm $expected_version"
-          test "$(./scripts/llm-sm -v | head -n 1)" = "llm-sm $expected_version"
-          test "$(LLM_SM_VERSION=test-build ./scripts/llm-sm version | head -n 1)" = "llm-sm test-build"
-          ./scripts/llm-sm -h >/dev/null
+          ./scripts/llm-ollama help >/dev/null
+          ./scripts/llm-ollama ai-commit --help >/dev/null
+          test "$(./scripts/llm-ollama version | head -n 1)" = "llm-ollama $expected_version"
+          test "$(./scripts/llm-ollama -v | head -n 1)" = "llm-ollama $expected_version"
+          test "$(LLM_OLLAMA_VERSION=test-build ./scripts/llm-ollama version | head -n 1)" = "llm-ollama test-build"
+          ./scripts/llm-ollama -h >/dev/null
           test -s scripts/prompts/ai-commit.txt
 
       - name: Smoke test bundled image layout
         run: |
           root="$(mktemp -d)"
-          mkdir -p "$root/usr/local/bin" "$root/usr/local/lib/llm-sm"
-          cp scripts/llm-sm "$root/usr/local/bin/llm-sm"
-          cp -R scripts/lib scripts/commands scripts/prompts "$root/usr/local/lib/llm-sm/"
-          chmod 0755 "$root/usr/local/bin/llm-sm"
+          mkdir -p "$root/usr/local/bin" "$root/usr/local/lib/llm-ollama"
+          cp scripts/llm-ollama "$root/usr/local/bin/llm-ollama"
+          cp -R scripts/lib scripts/commands scripts/prompts "$root/usr/local/lib/llm-ollama/"
+          chmod 0755 "$root/usr/local/bin/llm-ollama"
 
           expected_version="$(bash -c 'source "$1"; printf "%s" "$VERSION"' _ "$PWD/scripts/lib/core.sh")"
-          "$root/usr/local/bin/llm-sm" help >/dev/null
-          "$root/usr/local/bin/llm-sm" ai-commit --help >/dev/null
-          test "$("$root/usr/local/bin/llm-sm" version | head -n 1)" = "llm-sm $expected_version"
-          test -s "$root/usr/local/lib/llm-sm/prompts/ai-commit.txt"
+          "$root/usr/local/bin/llm-ollama" help >/dev/null
+          "$root/usr/local/bin/llm-ollama" ai-commit --help >/dev/null
+          test "$("$root/usr/local/bin/llm-ollama" version | head -n 1)" = "llm-ollama $expected_version"
+          test -s "$root/usr/local/lib/llm-ollama/prompts/ai-commit.txt"

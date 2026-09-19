@@ -1,13 +1,13 @@
 # 🤖 Local Small LLM Docker
 
-[![Docker Publish](https://github.com/infocyph/docker-llm-sm/actions/workflows/docker.publish.yml/badge.svg)](https://github.com/infocyph/docker-llm-sm/actions/workflows/docker.publish.yml)
-[![CLI Check](https://github.com/infocyph/docker-llm-sm/actions/workflows/cli.check.yml/badge.svg)](https://github.com/infocyph/docker-llm-sm/actions/workflows/cli.check.yml)
-![Docker Pulls](https://img.shields.io/docker/pulls/infocyph/llm-sm)
-![Docker Image Size](https://img.shields.io/docker/image-size/infocyph/llm-sm)
+[![Docker Publish](https://github.com/infocyph/docker-llm-ollama/actions/workflows/docker.publish.yml/badge.svg)](https://github.com/infocyph/docker-llm-ollama/actions/workflows/docker.publish.yml)
+[![CLI Check](https://github.com/infocyph/docker-llm-ollama/actions/workflows/cli.check.yml/badge.svg)](https://github.com/infocyph/docker-llm-ollama/actions/workflows/cli.check.yml)
+![Docker Pulls](https://img.shields.io/docker/pulls/infocyph/llm-ollama)
+![Docker Image Size](https://img.shields.io/docker/image-size/infocyph/llm-ollama)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Runtime: Ollama](https://img.shields.io/badge/Runtime-Ollama-black.svg)](https://ollama.com)
 
-`docker-llm-sm` is a small local Ollama provider/runtime with a bundled developer CLI and a baked default model.
+`docker-llm-ollama` is a small local Ollama provider/runtime with a bundled developer CLI and a baked default model.
 
 The image is intentionally provider-focused. It owns Ollama, model state, model-facing CLI commands and the local API. Container lifecycle, Nginx routing and higher-level AI features belong to Docker/Compose/LocalDevStack consumers.
 
@@ -15,15 +15,15 @@ The image is intentionally provider-focused. It owns Ollama, model state, model-
 
 | Item | Contract |
 |---|---|
-| Default model | `qwen2.5:3b` |
+| Default model | `qwen3:14b` |
 | Ollama API | `11434` inside the container |
 | Model store | `/root/.ollama` |
-| Default persistent volume | `llm-sm-data` |
+| Default persistent volume | `llm-ollama-data` |
 | Standard image | CPU / NVIDIA |
 | AMD image | separate ROCm `amd-*` tags |
 | Runtime privacy | `OLLAMA_NO_CLOUD=1` |
-| LocalDevStack internal URL | `http://llm-sm:11434` |
-| LocalDevStack user URL | `https://llm.localhost` |
+| LocalDevStack internal URL | `http://llm-ollama:11434` |
+| LocalDevStack user URL | `https://llm-ollama.localhost` |
 
 The standard image uses `ollama/ollama:latest`. The AMD image uses `ollama/ollama:rocm`. Publication resolves those moving upstream tags to a digest once per publish run so candidate validation and final publication use the same upstream bits.
 
@@ -32,20 +32,20 @@ The standard image uses `ollama/ollama:latest`. The AMD image uses `ollama/ollam
 Docker Hub:
 
 ```bash
-docker pull infocyph/llm-sm:latest
-docker pull infocyph/llm-sm:amd-latest
+docker pull infocyph/llm-ollama:latest
+docker pull infocyph/llm-ollama:amd-latest
 ```
 
 GHCR:
 
 ```bash
-docker pull ghcr.io/infocyph/llm-sm:latest
-docker pull ghcr.io/infocyph/llm-sm:amd-latest
+docker pull ghcr.io/infocyph/llm-ollama:latest
+docker pull ghcr.io/infocyph/llm-ollama:amd-latest
 ```
 
 Release tags are immutable. Moving `latest` / `amd-latest` tags are refreshed from the latest published stable GitHub release.
 
-Release versions are not hard-coded in the Dockerfile or CLI source. The publication workflow injects the GitHub release tag as `LLM_SM_VERSION` and verifies that `llm-sm version` reports that exact value. Non-release/local builds report `dev` unless a build version is explicitly supplied.
+Release versions are not hard-coded in the Dockerfile or CLI source. The publication workflow injects the GitHub release tag as `LLM_OLLAMA_VERSION` and verifies that `llm-ollama version` reports that exact value. Non-release/local builds report `dev` unless a build version is explicitly supplied.
 
 Current publication remains `linux/amd64`. Standard `linux/arm64` will be published only after a native arm64 model/runtime gate exists; it is not claimed prematurely.
 
@@ -63,7 +63,7 @@ The repository has one normal standalone base and three complete runtime example
 
 The files under `examples/compose/` are alternatives, not overlays for each other. `compose.workspace.yml` is the only repository-provided Compose overlay.
 
-LocalDevStack does **not** consume these standalone YAML files. It owns a separate `llm-sm` service in its own Compose graph and delegates provider commands through `lds llm ...`.
+LocalDevStack does **not** consume these standalone YAML files. It owns a separate `llm-ollama` service in its own Compose graph and delegates provider commands through `lds llm ...`.
 
 ## Quick start with Docker Compose
 
@@ -72,10 +72,10 @@ docker compose pull
 docker compose up -d
 ```
 
-The default Compose service key is `llm-sm`, so Docker-network consumers can use:
+The default Compose service key is `llm-ollama`, so Docker-network consumers can use:
 
 ```text
-http://llm-sm:11434
+http://llm-ollama:11434
 ```
 
 The standalone Compose example binds the API only to localhost:
@@ -88,41 +88,41 @@ Useful lifecycle commands:
 
 ```bash
 docker compose ps
-docker compose logs -f llm-sm
-docker compose restart llm-sm
+docker compose logs -f llm-ollama
+docker compose restart llm-ollama
 docker compose down
 ```
 
-Container lifecycle is intentionally not exposed through the `llm-sm` CLI.
+Container lifecycle is intentionally not exposed through the `llm-ollama` CLI.
 
 ## Persistent model state
 
 The default Compose volume is:
 
 ```text
-llm-sm-data -> /root/.ollama
+llm-ollama-data -> /root/.ollama
 ```
 
-A fresh empty Docker volume is populated from the image-baked model store, so `qwen2.5:3b` is available without a first-start model download.
+A fresh empty Docker volume is populated from the image-baked model store, so `qwen3:14b` is available without a first-start model download.
 
 User-pulled models survive container recreation and image replacement while the same volume is retained.
 
 Use another model store when isolation is required:
 
 ```bash
-LLM_SM_VOLUME=my-project-models docker compose up -d
+LLM_OLLAMA_VOLUME=my-project-models docker compose up -d
 ```
 
-The default `llm-sm-data` name is intentionally shared. Separate Compose projects using that default therefore reuse the same local model store. Set a distinct `LLM_SM_VOLUME` when projects must not share model state.
+The default `llm-ollama-data` name is intentionally shared. Separate Compose projects using that default therefore reuse the same local model store. Set a distinct `LLM_OLLAMA_VOLUME` when projects must not share model state.
 
-An existing populated volume is authoritative and hides the model store baked into a newer image. Upgrades never silently mutate that persistent store. If the requested model is absent, `llm-sm` returns an actionable error and the user can explicitly pull it.
+An existing populated volume is authoritative and hides the model store baked into a newer image. Upgrades never silently mutate that persistent store. If the requested model is absent, `llm-ollama` returns an actionable error and the user can explicitly pull it.
 
 ## Optional Compose workspace mount
 
 Repository-aware commands can use an optional Compose override rather than rebuilding the image:
 
 ```bash
-LLM_SM_WORKSPACE="$PWD" \
+LLM_OLLAMA_WORKSPACE="$PWD" \
   docker compose -f compose.yml -f compose.workspace.yml up -d
 ```
 
@@ -131,38 +131,38 @@ LLM_SM_WORKSPACE="$PWD" \
 The mount is **read-only by default**:
 
 ```text
-LLM_SM_WORKSPACE_MODE=ro
+LLM_OLLAMA_WORKSPACE_MODE=ro
 ```
 
 That is the recommended mode for analysis-only work:
 
 ```bash
 docker compose -f compose.yml -f compose.workspace.yml \
-  exec llm-sm llm-sm review src/Service.php
+  exec llm-ollama llm-ollama review src/Service.php
 
 docker compose -f compose.yml -f compose.workspace.yml \
-  exec llm-sm llm-sm code -f src/HotPath.php "Optimize without changing behavior"
+  exec llm-ollama llm-ollama code -f src/HotPath.php "Optimize without changing behavior"
 
 docker compose -f compose.yml -f compose.workspace.yml \
-  exec llm-sm llm-sm ai-commit --print
+  exec llm-ollama llm-ollama ai-commit --print
 ```
 
 For commands that intentionally mutate Git state, opt into a writable workspace:
 
 ```bash
-LLM_SM_WORKSPACE="$PWD" LLM_SM_WORKSPACE_MODE=rw \
+LLM_OLLAMA_WORKSPACE="$PWD" LLM_OLLAMA_WORKSPACE_MODE=rw \
   docker compose -f compose.yml -f compose.workspace.yml up -d
 
 docker compose -f compose.yml -f compose.workspace.yml \
-  exec llm-sm llm-sm ai-commit --yes
+  exec llm-ollama llm-ollama ai-commit --yes
 ```
 
 The workspace mount is optional and independent from the persistent `/root/.ollama` model volume. The image never scans or mounts host repositories automatically.
 
-When combining `compose.workspace.yml` with files under `examples/compose/`, set `LLM_SM_WORKSPACE` to an absolute path such as `$PWD` so the intended repository is mounted. For example:
+When combining `compose.workspace.yml` with files under `examples/compose/`, set `LLM_OLLAMA_WORKSPACE` to an absolute path such as `$PWD` so the intended repository is mounted. For example:
 
 ```bash
-LLM_SM_WORKSPACE="$PWD" \
+LLM_OLLAMA_WORKSPACE="$PWD" \
   docker compose -f examples/compose/nvidia.yml -f compose.workspace.yml up -d
 ```
 
@@ -203,11 +203,11 @@ CPU:
 
 ```bash
 docker run -d \
-  --name llm-sm \
+  --name llm-ollama \
   --restart unless-stopped \
   -p 127.0.0.1:11434:11434 \
-  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
-  infocyph/llm-sm:latest
+  --mount type=volume,src=llm-ollama-data,dst=/root/.ollama \
+  infocyph/llm-ollama:latest
 ```
 
 NVIDIA adds:
@@ -216,7 +216,7 @@ NVIDIA adds:
 --gpus=all
 ```
 
-AMD uses `infocyph/llm-sm:amd-latest` plus:
+AMD uses `infocyph/llm-ollama:amd-latest` plus:
 
 ```text
 --device=/dev/kfd
@@ -227,18 +227,18 @@ For a standalone repository-aware container, add a bind mount and working direct
 
 ```bash
 docker run -d \
-  --name llm-sm \
+  --name llm-ollama \
   --restart unless-stopped \
   -p 127.0.0.1:11434:11434 \
-  --mount type=volume,src=llm-sm-data,dst=/root/.ollama \
+  --mount type=volume,src=llm-ollama-data,dst=/root/.ollama \
   --mount type=bind,src="$PWD",dst=/workspace,readonly \
   -w /workspace \
-  infocyph/llm-sm:latest
+  infocyph/llm-ollama:latest
 ```
 
-The explicit `--name llm-sm` is appropriate for this standalone `docker run` flow. Compose intentionally does not set `container_name`.
+The explicit `--name llm-ollama` is appropriate for this standalone `docker run` flow. Compose intentionally does not set `container_name`.
 
-## Bundled `llm-sm` CLI
+## Bundled `llm-ollama` CLI
 
 The CLI is fixed image content. Models remain mutable persistent runtime state.
 
@@ -253,10 +253,10 @@ Low level: ollama, api, version
 With the standalone Compose files in this repository:
 
 ```bash
-docker compose exec llm-sm llm-sm help
-docker compose exec llm-sm llm-sm version
-docker compose exec llm-sm llm-sm models
-docker compose exec llm-sm llm-sm ask "Explain dependency injection briefly"
+docker compose exec llm-ollama llm-ollama help
+docker compose exec llm-ollama llm-ollama version
+docker compose exec llm-ollama llm-ollama models
+docker compose exec llm-ollama llm-ollama ask "Explain dependency injection briefly"
 ```
 
 These bare `docker compose ...` commands require this repository's `compose.yml` in the current Compose context. Inside LocalDevStack, use its wrapper because LocalDevStack assembles Compose from its own files, env files, and runtime overrides:
@@ -268,68 +268,68 @@ lds llm models
 lds llm ask "Explain dependency injection briefly"
 ```
 
-Running bare `docker compose exec llm-sm ...` from the LocalDevStack repository root fails with `no configuration file provided: not found` before the container CLI is invoked.
+Running bare `docker compose exec llm-ollama ...` from the LocalDevStack repository root fails with `no configuration file provided: not found` before the container CLI is invoked.
 
 Model management is explicit:
 
 ```bash
-docker compose exec llm-sm llm-sm pull qwen2.5:1.5b
-docker compose exec llm-sm llm-sm show qwen2.5:1.5b
-docker compose exec llm-sm llm-sm run qwen2.5:1.5b "Hello"
-docker compose exec llm-sm llm-sm rm qwen2.5:1.5b
+docker compose exec llm-ollama llm-ollama pull qwen2.5:1.5b
+docker compose exec llm-ollama llm-ollama show qwen2.5:1.5b
+docker compose exec llm-ollama llm-ollama run qwen2.5:1.5b "Hello"
+docker compose exec llm-ollama llm-ollama rm qwen2.5:1.5b
 ```
 
 The CLI does not silently pull a missing model when another command selects it.
 
 ### Attachments and multimodal prompts
 
-`llm-sm prompt` accepts normal text context, large piped input, images and PDFs.
+`llm-ollama prompt` accepts normal text context, large piped input, images and PDFs.
 
 Auto-detect a text file, image or PDF from its extension:
 
 ```bash
-docker compose exec llm-sm \
-  llm-sm prompt --attach /workspace/notes.txt "Summarize this"
+docker compose exec llm-ollama \
+  llm-ollama prompt --attach /workspace/notes.txt "Summarize this"
 ```
 
 Use an image with a vision-capable model:
 
 ```bash
-docker compose exec llm-sm llm-sm pull qwen2.5vl:3b
+docker compose exec llm-ollama llm-ollama pull qwen2.5vl:3b
 
-docker compose exec llm-sm \
-  llm-sm prompt -m qwen2.5vl:3b \
+docker compose exec llm-ollama \
+  llm-ollama prompt -m qwen2.5vl:3b \
   --image /workspace/diagram.png \
   "Explain this architecture diagram"
 ```
 
-The baked `qwen2.5:3b` model remains the lightweight text default. The CLI never silently switches models or downloads a vision model. When image input is requested, the selected model must report Ollama's `vision` capability.
+The baked `qwen3:14b` model is the default general-purpose text model. The CLI never silently switches models or downloads a vision model. When image input is requested, the selected model must report Ollama's `vision` capability.
 
 For text-based PDFs, extract text locally and send it as normal context:
 
 ```bash
-docker compose exec llm-sm \
-  llm-sm prompt --pdf /workspace/spec.pdf "Summarize the important requirements"
+docker compose exec llm-ollama \
+  llm-ollama prompt --pdf /workspace/spec.pdf "Summarize the important requirements"
 ```
 
 For scanned PDFs, diagrams, forms or layouts where the page image matters, render the PDF pages and send them to a vision model:
 
 ```bash
-docker compose exec llm-sm \
-  llm-sm prompt -m qwen2.5vl:3b \
+docker compose exec llm-ollama \
+  llm-ollama prompt -m qwen2.5vl:3b \
   --pdf-vision /workspace/scanned-spec.pdf \
   "Read and summarize this document"
 ```
 
-`LLM_SM_PDF_DPI` controls page rendering and defaults to `120`. PDF text extraction/rendering is provided by the image's `poppler-utils` runtime dependency.
+`LLM_OLLAMA_PDF_DPI` controls page rendering and defaults to `120`. PDF text extraction/rendering is provided by the image's `poppler-utils` runtime dependency.
 
 Multiple `--attach`, `--image`, `--pdf` and `--pdf-vision` options can be supplied in one request.
 
 ### Structured JSON
 
 ```bash
-docker compose exec llm-sm \
-  llm-sm json -r "Return an object with name and version"
+docker compose exec llm-ollama \
+  llm-ollama json -r "Return an object with name and version"
 ```
 
 JSON Schema files are validated locally before a request is sent.
@@ -341,14 +341,14 @@ With a workspace mount:
 ```bash
 git add .
 docker compose -f compose.yml -f compose.workspace.yml \
-  exec llm-sm llm-sm ai-commit --print
+  exec llm-ollama llm-ollama ai-commit --print
 ```
 
 Without a repository mount, send the staged diff through stdin:
 
 ```bash
 git diff --cached | \
-  docker compose exec -T llm-sm llm-sm ai-commit --diff-stdin
+  docker compose exec -T llm-ollama llm-ollama ai-commit --diff-stdin
 ```
 
 ## Configuration reference
@@ -357,30 +357,30 @@ Standalone Compose reads normal Compose interpolation values from the shell and 
 
 | Setting | Default | Purpose |
 |---|---:|---|
-| `LLM_SM_IMAGE` | `infocyph/llm-sm:latest` | Standard image used by `compose.yml` / CPU / NVIDIA |
-| `LLM_SM_AMD_IMAGE` | `infocyph/llm-sm:amd-latest` | AMD/ROCm image |
-| `LLM_SM_VOLUME` | `llm-sm-data` | Persistent Ollama model volume name |
-| `LLM_SM_WORKSPACE` | `.` | Host workspace used only with `compose.workspace.yml` |
-| `LLM_SM_WORKSPACE_MODE` | `ro` | Workspace bind mode; use `rw` only deliberately |
-| `LLM_SM_MODEL` | empty | CLI default-model override; empty falls back to the image's baked model |
-| `LLM_SM_SYSTEM` | empty | Default system instruction for `llm-sm prompt` |
-| `LLM_SM_INPUT_WARN_BYTES` | `1048576` | Warning threshold for text/diff input |
-| `LLM_SM_INPUT_MAX_BYTES` | `0` | Hard text/diff ceiling; `0` disables it |
-| `LLM_SM_ATTACHMENT_MAX_BYTES` | `16777216` | Per attachment/source-file limit |
-| `LLM_SM_ATTACHMENTS_MAX_BYTES` | `33554432` | Aggregate source-attachment limit |
-| `LLM_SM_ATTACHMENT_MAX_COUNT` | `16` | Maximum source attachments in one request; rendered PDF pages use the separate page limit |
-| `LLM_SM_PDF_MAX_PAGES` | `24` | Maximum total pages rendered by `--pdf-vision` |
-| `LLM_SM_PDF_DPI` | `120` | PDF-to-image render DPI |
-| `LLM_SM_ALLOW_LARGE_INPUT` | `0` | Explicitly bypass configured input/attachment/page ceilings when set to `1` |
+| `LLM_OLLAMA_IMAGE` | `infocyph/llm-ollama:latest` | Standard image used by `compose.yml` / CPU / NVIDIA |
+| `LLM_OLLAMA_AMD_IMAGE` | `infocyph/llm-ollama:amd-latest` | AMD/ROCm image |
+| `LLM_OLLAMA_VOLUME` | `llm-ollama-data` | Persistent Ollama model volume name |
+| `LLM_OLLAMA_WORKSPACE` | `.` | Host workspace used only with `compose.workspace.yml` |
+| `LLM_OLLAMA_WORKSPACE_MODE` | `ro` | Workspace bind mode; use `rw` only deliberately |
+| `LLM_OLLAMA_MODEL` | empty | CLI default-model override; empty falls back to the image's baked model |
+| `LLM_OLLAMA_SYSTEM` | empty | Default system instruction for `llm-ollama prompt` |
+| `LLM_OLLAMA_INPUT_WARN_BYTES` | `1048576` | Warning threshold for text/diff input |
+| `LLM_OLLAMA_INPUT_MAX_BYTES` | `0` | Hard text/diff ceiling; `0` disables it |
+| `LLM_OLLAMA_ATTACHMENT_MAX_BYTES` | `16777216` | Per attachment/source-file limit |
+| `LLM_OLLAMA_ATTACHMENTS_MAX_BYTES` | `33554432` | Aggregate source-attachment limit |
+| `LLM_OLLAMA_ATTACHMENT_MAX_COUNT` | `16` | Maximum source attachments in one request; rendered PDF pages use the separate page limit |
+| `LLM_OLLAMA_PDF_MAX_PAGES` | `24` | Maximum total pages rendered by `--pdf-vision` |
+| `LLM_OLLAMA_PDF_DPI` | `120` | PDF-to-image render DPI |
+| `LLM_OLLAMA_ALLOW_LARGE_INPUT` | `0` | Explicitly bypass configured input/attachment/page ceilings when set to `1` |
 | `OLLAMA_PORT` | `11434` | Standalone **host** port mapped to container port 11434 |
 | `OLLAMA_NUM_PARALLEL` | `1` | Ollama parallel request limit |
 | `OLLAMA_MAX_LOADED_MODELS` | `1` | Ollama loaded-model limit |
 | `OLLAMA_KEEP_ALIVE` | `5m` | Ollama model keep-alive |
 | `OLLAMA_NO_CLOUD` | `1` | Keep Ollama cloud integration disabled |
 
-`LLM_SM_URL`, `LLM_SM_AI_COMMIT_PROMPT_FILE`, and `NO_COLOR` are CLI-level advanced variables. They are not normal standalone Compose knobs because the bundled CLI talks to the daemon at `127.0.0.1:11434` inside its own container and the bundled commit prompt is image content.
+`LLM_OLLAMA_URL`, `LLM_OLLAMA_AI_COMMIT_PROMPT_FILE`, and `NO_COLOR` are CLI-level advanced variables. They are not normal standalone Compose knobs because the bundled CLI talks to the daemon at `127.0.0.1:11434` inside its own container and the bundled commit prompt is image content.
 
-Image build inputs are separate from runtime configuration: `OLLAMA_BASE_IMAGE` selects the upstream image and `OLLAMA_MODEL` selects the model baked into the image. Release publication supplies `LLM_SM_VERSION` from the GitHub release tag; users should not maintain a release version in source files.
+Image build inputs are separate from runtime configuration: `OLLAMA_BASE_IMAGE` selects the upstream image and `OLLAMA_MODEL` selects the model baked into the image. Release publication supplies `LLM_OLLAMA_VERSION` from the GitHub release tag; users should not maintain a release version in source files.
 
 ## Large-input behavior
 
@@ -389,23 +389,23 @@ Large text and Git diffs remain warning-only by default. Attachments and PDF-vis
 Defaults:
 
 ```text
-LLM_SM_INPUT_WARN_BYTES=1048576
-LLM_SM_INPUT_MAX_BYTES=0
-LLM_SM_ATTACHMENT_MAX_BYTES=16777216
-LLM_SM_ATTACHMENTS_MAX_BYTES=33554432
-LLM_SM_ATTACHMENT_MAX_COUNT=16
-LLM_SM_PDF_MAX_PAGES=24
+LLM_OLLAMA_INPUT_WARN_BYTES=1048576
+LLM_OLLAMA_INPUT_MAX_BYTES=0
+LLM_OLLAMA_ATTACHMENT_MAX_BYTES=16777216
+LLM_OLLAMA_ATTACHMENTS_MAX_BYTES=33554432
+LLM_OLLAMA_ATTACHMENT_MAX_COUNT=16
+LLM_OLLAMA_PDF_MAX_PAGES=24
 ```
 
-`LLM_SM_INPUT_MAX_BYTES=0` means no text/diff hard ceiling. Source-attachment byte/count limits and the PDF page limit remain active unless their individual setting is set to `0`. The effective useful size is still bounded by the selected model's context window, Ollama/runtime memory and available host RAM/VRAM.
+`LLM_OLLAMA_INPUT_MAX_BYTES=0` means no text/diff hard ceiling. Source-attachment byte/count limits and the PDF page limit remain active unless their individual setting is set to `0`. The effective useful size is still bounded by the selected model's context window, Ollama/runtime memory and available host RAM/VRAM.
 
 To impose a local policy ceiling, set a non-zero maximum:
 
 ```bash
-LLM_SM_INPUT_MAX_BYTES=4194304
+LLM_OLLAMA_INPUT_MAX_BYTES=4194304
 ```
 
-`LLM_SM_ALLOW_LARGE_INPUT=1` explicitly bypasses configured text, attachment-count, attachment-byte, and PDF-page ceilings for a deliberate request. Input is never silently truncated by `llm-sm`.
+`LLM_OLLAMA_ALLOW_LARGE_INPUT=1` explicitly bypasses configured text, attachment-count, attachment-byte, and PDF-page ceilings for a deliberate request. Input is never silently truncated by `llm-ollama`.
 
 Large request bodies are built through temporary files and `jq --rawfile`/file-backed `curl` payloads rather than shell command-line arguments, avoiding normal shell argv-size limits for large diffs and document text.
 
@@ -424,7 +424,7 @@ Non-streaming generation:
 ```bash
 curl http://127.0.0.1:11434/api/generate \
   -H 'Content-Type: application/json' \
-  -d '{"model":"qwen2.5:3b","prompt":"Reply with OK only.","stream":false}'
+  -d '{"model":"qwen3:14b","prompt":"Reply with OK only.","stream":false}'
 ```
 
 Ollama's supported OpenAI-compatible `/v1/...` endpoints are exposed directly as well.
@@ -436,16 +436,17 @@ No proprietary provider API is added by this project.
 The provider contract is:
 
 ```text
-service:  llm-sm
-internal: http://llm-sm:11434
-external: https://llm.localhost
+service:  llm-ollama
+internal: http://llm-ollama:11434
+https:    https://llm-ollama.localhost
+native:   http://llm-ollama.localhost:11434
 ```
 
-Internal Docker consumers should use `http://llm-sm:11434` directly. They should not route service-to-service traffic through Nginx.
+Internal Docker consumers should use `http://llm-ollama:11434` directly. They should not route service-to-service traffic through Nginx.
 
-Nginx owns the optional user-facing HTTPS route. LocalDevStack can omit the direct host `11434` mapping entirely and expose only `443` while keeping `llm-sm:11434` available on the internal network.
+Nginx owns both LocalDevStack host-facing routes: TLS on port `443` and a loopback-only native Ollama listener on port `11434`. The provider container itself remains internal and has no published host port in LocalDevStack.
 
-The broader stack must remain usable when `llm-sm` is disabled or absent. Consumer-specific AI behavior belongs in those consumers, not in this image.
+The broader stack must remain usable when `llm-ollama` is disabled or absent. Consumer-specific AI behavior belongs in those consumers, not in this image.
 
 ## Privacy and exposure
 

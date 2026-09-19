@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-IMAGE="${1:-${LLM_SM_SMOKE_IMAGE:-llm-sm:runtime-smoke}}"
-MODEL="${OLLAMA_MODEL:-qwen2.5:3b}"
+IMAGE="${1:-${LLM_OLLAMA_SMOKE_IMAGE:-llm-ollama:runtime-smoke}}"
+MODEL="${OLLAMA_MODEL:-qwen3:14b}"
 suffix="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-$$"
-container="llm-sm-smoke-${suffix}"
-volume="llm-sm-smoke-${suffix}"
-network="llm-sm-smoke-${suffix}"
+container="llm-ollama-smoke-${suffix}"
+volume="llm-ollama-smoke-${suffix}"
+network="llm-ollama-smoke-${suffix}"
 tmp_dir="$(mktemp -d)"
 
 require_command() {
@@ -48,7 +48,7 @@ start_container() {
   docker run -d \
     --name "$container" \
     --network "$network" \
-    --network-alias llm-sm \
+    --network-alias llm-ollama \
     --mount "type=volume,src=${volume},dst=/root/.ollama" \
     "$IMAGE" >/dev/null
   wait_healthy
@@ -60,7 +60,7 @@ peer_get() {
     --network "$network" \
     --entrypoint curl \
     "$IMAGE" \
-    --connect-timeout 3 -fsS "http://llm-sm:11434${path}"
+    --connect-timeout 3 -fsS "http://llm-ollama:11434${path}"
 }
 
 require_command docker
@@ -105,16 +105,16 @@ docker exec "$container" curl --connect-timeout 3 --fail-with-body -sS \
   http://127.0.0.1:11434/v1/chat/completions \
   | jq -e '.choices[0].message.content | type == "string"' >/dev/null
 
-docker exec "$container" llm-sm models >/dev/null
-docker exec "$container" llm-sm ask -m "$MODEL" 'Reply with OK only.' >/dev/null
+docker exec "$container" llm-ollama models >/dev/null
+docker exec "$container" llm-ollama ask -m "$MODEL" 'Reply with OK only.' >/dev/null
 
-if docker exec "$container" llm-sm ask -m llm-sm-smoke-model-does-not-exist 'test' >"$tmp_dir/missing.out" 2>"$tmp_dir/missing.err"; then
+if docker exec "$container" llm-ollama ask -m llm-ollama-smoke-model-does-not-exist 'test' >"$tmp_dir/missing.out" 2>"$tmp_dir/missing.err"; then
   printf 'Missing-model command unexpectedly succeeded.\n' >&2
   exit 1
 fi
-grep -q "is not installed. Run 'llm-sm pull" "$tmp_dir/missing.err"
+grep -q "is not installed. Run 'llm-ollama pull" "$tmp_dir/missing.err"
 
-docker exec "$container" sh -c 'printf smoke > /root/.ollama/.llm-sm-persistence-smoke'
+docker exec "$container" sh -c 'printf smoke > /root/.ollama/.llm-ollama-persistence-smoke'
 
 printf 'Validating clean SIGTERM shutdown...\n'
 docker stop --timeout 30 "$container" >/dev/null
@@ -124,7 +124,7 @@ docker rm "$container" >/dev/null
 
 printf 'Recreating container with the same model volume...\n'
 start_container
-docker exec "$container" test -f /root/.ollama/.llm-sm-persistence-smoke
+docker exec "$container" test -f /root/.ollama/.llm-ollama-persistence-smoke
 
 tags="$(docker exec "$container" curl --connect-timeout 3 -fsS http://127.0.0.1:11434/api/tags)"
 jq -e --arg model "$MODEL" 'any(.models[]?; .name == $model or .model == $model)' <<<"$tags" >/dev/null

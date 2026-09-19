@@ -147,7 +147,7 @@ jobs:
           {
             echo "OLLAMA_BASE_DIGEST=$digest"
             echo "RESOLVED_OLLAMA_BASE_IMAGE=${OLLAMA_BASE_IMAGE}@${digest}"
-            echo "CANDIDATE_IMAGE=llm-sm:publish-candidate-${{ matrix.variant }}"
+            echo "CANDIDATE_IMAGE=llm-ollama:publish-candidate-${{ matrix.variant }}"
           } >> "$GITHUB_ENV"
 
       - name: Build validated release candidate
@@ -158,10 +158,10 @@ jobs:
           load: true
           pull: true
           push: false
-          tags: llm-sm:publish-candidate-${{ matrix.variant }}
+          tags: llm-ollama:publish-candidate-${{ matrix.variant }}
           build-args: |
             OLLAMA_BASE_IMAGE=${{ env.RESOLVED_OLLAMA_BASE_IMAGE }}
-            LLM_SM_VERSION=${{ env.RELEASE_TAG }}
+            LLM_OLLAMA_VERSION=${{ env.RELEASE_TAG }}
           cache-from: type=gha,scope=publish-candidate-${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=publish-candidate-${{ matrix.variant }}
           provenance: false
@@ -170,26 +170,26 @@ jobs:
       - name: Run standard runtime release gate
         if: matrix.runtime_smoke
         env:
-          OLLAMA_MODEL: qwen2.5:3b
+          OLLAMA_MODEL: qwen3:14b
         run: .automation/scripts/ci/runtime-smoke.sh "$CANDIDATE_IMAGE"
 
       - name: Record candidate metadata
         env:
-          OLLAMA_MODEL: qwen2.5:3b
+          OLLAMA_MODEL: qwen3:14b
         run: |
           set -euo pipefail
           ollama_output="$(docker run --rm --entrypoint /bin/ollama "$CANDIDATE_IMAGE" --version)"
-          cli_output="$(docker run --rm --entrypoint llm-sm "$CANDIDATE_IMAGE" version)"
+          cli_output="$(docker run --rm --entrypoint llm-ollama "$CANDIDATE_IMAGE" version)"
           ollama_version="${ollama_output%%$'\n'*}"
           cli_version="${cli_output%%$'\n'*}"
-          [[ "$cli_version" == "llm-sm $RELEASE_TAG" ]] || {
-            echo "CLI version mismatch: expected 'llm-sm $RELEASE_TAG', got '$cli_version'." >&2
+          [[ "$cli_version" == "llm-ollama $RELEASE_TAG" ]] || {
+            echo "CLI version mismatch: expected 'llm-ollama $RELEASE_TAG', got '$cli_version'." >&2
             exit 1
           }
           model_digest='build-verified; runtime digest not queried on this variant'
 
           if [[ '${{ matrix.runtime_smoke }}' == 'true' ]]; then
-            name="llm-sm-meta-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
+            name="llm-ollama-meta-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
             trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
             docker run -d --name "$name" "$CANDIDATE_IMAGE" >/dev/null
             for _ in $(seq 1 90); do
@@ -271,7 +271,7 @@ jobs:
           push: true
           build-args: |
             OLLAMA_BASE_IMAGE=${{ env.RESOLVED_OLLAMA_BASE_IMAGE }}
-            LLM_SM_VERSION=${{ env.RELEASE_TAG }}
+            LLM_OLLAMA_VERSION=${{ env.RELEASE_TAG }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=publish-candidate-${{ matrix.variant }}
@@ -321,11 +321,11 @@ jobs:
         if: matrix.runtime_smoke
         env:
           DIGEST: ${{ steps.push.outputs.digest }}
-          OLLAMA_MODEL: qwen2.5:3b
+          OLLAMA_MODEL: qwen3:14b
         run: |
           set -euo pipefail
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}@${DIGEST}"
-          name="llm-sm-published-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
+          name="llm-ollama-published-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}"
           trap 'docker rm -f "$name" >/dev/null 2>&1 || true' EXIT
           docker run -d --name "$name" "$image" >/dev/null
           for _ in $(seq 1 90); do
@@ -352,7 +352,7 @@ jobs:
             echo "- Resolved base digest: \`$OLLAMA_BASE_DIGEST\`"
             echo "- Ollama: \`$OLLAMA_VERSION\`"
             echo "- CLI: \`$CLI_VERSION\`"
-            echo "- Default model: \`qwen2.5:3b\`"
+            echo "- Default model: \`qwen3:14b\`"
             echo "- Model digest: \`$MODEL_DIGEST\`"
             echo "- Published digest: \`$DIGEST\`"
             echo "- Platform: \`linux/amd64\`"

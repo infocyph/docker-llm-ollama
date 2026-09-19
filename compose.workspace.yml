@@ -1,5 +1,5 @@
 services:
-  llm-sm:
+  llm-ollama:
     working_dir: /workspace
     volumes:
-      - ${LLM_SM_WORKSPACE:-.}:/workspace:${LLM_SM_WORKSPACE_MODE:-ro}
+      - ${LLM_OLLAMA_WORKSPACE:-.}:/workspace:${LLM_OLLAMA_WORKSPACE_MODE:-ro}

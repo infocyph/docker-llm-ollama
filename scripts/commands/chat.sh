@@ -12,7 +12,7 @@ command_main() {
     shift
   fi
 
-  [[ $# -eq 0 ]] || die "Usage: llm-sm chat [model]"
+  [[ $# -eq 0 ]] || die "Usage: llm-ollama chat [model]"
   model="$(resolve_model "$model")"
   require_model "$model"
   exec_ollama run "$model"

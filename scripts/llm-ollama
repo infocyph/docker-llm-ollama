@@ -8,20 +8,20 @@ if [[ -f "$SCRIPT_DIR/lib/core.sh" && -d "$SCRIPT_DIR/commands" ]]; then
   RUNTIME_ROOT="$SCRIPT_DIR"
 else
   PREFIX="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-  RUNTIME_ROOT="$PREFIX/lib/llm-sm"
+  RUNTIME_ROOT="$PREFIX/lib/llm-ollama"
 fi
 
 for required in \
   "$RUNTIME_ROOT/lib/core.sh" \
   "$RUNTIME_ROOT/lib/ollama.sh"; do
   if [[ ! -f "$required" ]]; then
-    printf 'Error: llm-sm runtime file not found: %s\n' "$required" >&2
+    printf 'Error: llm-ollama runtime file not found: %s\n' "$required" >&2
     exit 1
   fi
 done
 
-export LLM_SM_ENTRYPOINT="$ENTRYPOINT"
-export LLM_SM_RUNTIME_ROOT="$RUNTIME_ROOT"
+export LLM_OLLAMA_ENTRYPOINT="$ENTRYPOINT"
+export LLM_OLLAMA_RUNTIME_ROOT="$RUNTIME_ROOT"
 
 # shellcheck source=/dev/null
 source "$RUNTIME_ROOT/lib/core.sh"
@@ -41,7 +41,7 @@ esac
 [[ "$command" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "Invalid command: $command"
 
 command_file="$RUNTIME_ROOT/commands/$command.sh"
-[[ -f "$command_file" ]] || die "Unknown command: $command. Run 'llm-sm help'."
+[[ -f "$command_file" ]] || die "Unknown command: $command. Run 'llm-ollama help'."
 
 # shellcheck source=/dev/null
 source "$command_file"

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-IMAGE="${1:-${LLM_SM_SMOKE_IMAGE:-llm-sm:runtime-smoke}}"
+IMAGE="${1:-${LLM_OLLAMA_SMOKE_IMAGE:-llm-ollama:runtime-smoke}}"
 CANDIDATE_PROMPT="${2:-}"
-RUNS="${LLM_SM_BENCHMARK_RUNS:-3}"
-MODEL="${OLLAMA_MODEL:-qwen2.5:3b}"
-name="llm-sm-prompt-bench-${GITHUB_RUN_ID:-local}-${RANDOM}"
+RUNS="${LLM_OLLAMA_BENCHMARK_RUNS:-3}"
+MODEL="${OLLAMA_MODEL:-qwen3:14b}"
+name="llm-ollama-prompt-bench-${GITHUB_RUN_ID:-local}-${RANDOM}"
 tmp="$(mktemp -d)"
 
 cleanup() {
@@ -14,7 +14,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-[[ "$RUNS" =~ ^[1-9][0-9]*$ ]] || { echo 'LLM_SM_BENCHMARK_RUNS must be a positive integer.' >&2; exit 1; }
+[[ "$RUNS" =~ ^[1-9][0-9]*$ ]] || { echo 'LLM_OLLAMA_BENCHMARK_RUNS must be a positive integer.' >&2; exit 1; }
 docker image inspect "$IMAGE" >/dev/null
 
 cat > "$tmp/fixture.diff" <<'EOF'
@@ -62,19 +62,19 @@ run_case() {
   if [[ -n "$prompt_file" ]]; then
     size="$(container_file_bytes "$prompt_file")"
   else
-    size="$(container_file_bytes /usr/local/lib/llm-sm/prompts/ai-commit.txt)"
+    size="$(container_file_bytes /usr/local/lib/llm-ollama/prompts/ai-commit.txt)"
   fi
 
   for run in $(seq 1 "$RUNS"); do
     start="$(date +%s%3N)"
     if [[ -n "$prompt_file" ]]; then
       output="$(docker exec -i \
-        -e LLM_SM_MODEL="$MODEL" \
-        -e LLM_SM_AI_COMMIT_PROMPT_FILE="$prompt_file" \
-        "$name" llm-sm ai-commit --diff-stdin --print < "$tmp/fixture.diff")"
+        -e LLM_OLLAMA_MODEL="$MODEL" \
+        -e LLM_OLLAMA_AI_COMMIT_PROMPT_FILE="$prompt_file" \
+        "$name" llm-ollama ai-commit --diff-stdin --print < "$tmp/fixture.diff")"
     else
-      output="$(docker exec -i -e LLM_SM_MODEL="$MODEL" \
-        "$name" llm-sm ai-commit --diff-stdin --print < "$tmp/fixture.diff")"
+      output="$(docker exec -i -e LLM_OLLAMA_MODEL="$MODEL" \
+        "$name" llm-ollama ai-commit --diff-stdin --print < "$tmp/fixture.diff")"
     fi
     end="$(date +%s%3N)"
     elapsed=$((end - start))
