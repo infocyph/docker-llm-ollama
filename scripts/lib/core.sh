@@ -2,7 +2,7 @@
 
 # Shared by dynamically loaded command modules.
 # shellcheck disable=SC2034
-VERSION="${LLM_SM_VERSION:-0.04}"
+VERSION="${LLM_SM_VERSION:-dev}"
 API_URL="${LLM_SM_URL:-http://127.0.0.1:11434}"
 DEFAULT_MODEL_FALLBACK="qwen2.5:3b"
 DEFAULT_INPUT_WARN_BYTES=1048576
