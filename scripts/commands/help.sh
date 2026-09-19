@@ -58,8 +58,12 @@ ${BOLD}Environment:${RESET}
   LLM_SM_SYSTEM                         Default system text for prompt
   LLM_SM_AI_COMMIT_PROMPT_FILE          Override bundled ai-commit prompt file
   LLM_SM_INPUT_WARN_BYTES               Warn above this input size (default: 1048576)
-  LLM_SM_INPUT_MAX_BYTES                Optional hard limit; 0 disables it (default: 0)
-  LLM_SM_ALLOW_LARGE_INPUT=1            Bypass a configured non-zero hard input limit
+  LLM_SM_INPUT_MAX_BYTES                Optional text/diff hard limit; 0 disables it (default: 0)
+  LLM_SM_ATTACHMENT_MAX_BYTES           Per-file attachment limit (default: 16777216)
+  LLM_SM_ATTACHMENTS_MAX_BYTES          Aggregate attachment limit (default: 33554432)
+  LLM_SM_ATTACHMENT_MAX_COUNT           Attachment-count limit (default: 16)
+  LLM_SM_PDF_MAX_PAGES                  PDF-vision page limit (default: 24)
+  LLM_SM_ALLOW_LARGE_INPUT=1            Deliberately bypass configured hard limits
   LLM_SM_PDF_DPI                        PDF vision render DPI (default: 120)
   NO_COLOR                              Disable colored output
 
