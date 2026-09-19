@@ -15,7 +15,7 @@ The image is intentionally provider-focused. It owns Ollama, model state, model-
 
 | Item | Contract |
 |---|---|
-| Default model | `qwen2.5:3b` |
+| Default model | `qwen3:14b` |
 | Ollama API | `11434` inside the container |
 | Model store | `/root/.ollama` |
 | Default persistent volume | `llm-sm-data` |
@@ -103,7 +103,7 @@ The default Compose volume is:
 llm-sm-data -> /root/.ollama
 ```
 
-A fresh empty Docker volume is populated from the image-baked model store, so `qwen2.5:3b` is available without a first-start model download.
+A fresh empty Docker volume is populated from the image-baked model store, so `qwen3:14b` is available without a first-start model download.
 
 User-pulled models survive container recreation and image replacement while the same volume is retained.
 
@@ -303,7 +303,7 @@ docker compose exec llm-sm \
   "Explain this architecture diagram"
 ```
 
-The baked `qwen2.5:3b` model remains the lightweight text default. The CLI never silently switches models or downloads a vision model. When image input is requested, the selected model must report Ollama's `vision` capability.
+The baked `qwen3:14b` model is the default general-purpose text model. The CLI never silently switches models or downloads a vision model. When image input is requested, the selected model must report Ollama's `vision` capability.
 
 For text-based PDFs, extract text locally and send it as normal context:
 
@@ -424,7 +424,7 @@ Non-streaming generation:
 ```bash
 curl http://127.0.0.1:11434/api/generate \
   -H 'Content-Type: application/json' \
-  -d '{"model":"qwen2.5:3b","prompt":"Reply with OK only.","stream":false}'
+  -d '{"model":"qwen3:14b","prompt":"Reply with OK only.","stream":false}'
 ```
 
 Ollama's supported OpenAI-compatible `/v1/...` endpoints are exposed directly as well.
