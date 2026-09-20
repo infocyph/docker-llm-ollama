@@ -55,7 +55,27 @@ jobs:
           test "$(env -u LLM_OLLAMA_MODEL -u OLLAMA_MODEL bash -c 'source "$1"; resolve_model' _ "$core")" = qwen3:14b
 
           bash -c 'source "$1"; source "$2"; build_generate_payload "test-model" "hello\nworld" "{\"type\":\"object\"}"' _ "$core" "$ollama" \
-            | jq -e '.model == "test-model" and .stream == false and .format.type == "object"' >/dev/null
+            | jq -e '.model == "test-model" and .stream == false and .format.type == "object" and .think == false' >/dev/null
+
+          think_dir="$(mktemp -d)"
+          trap 'rm -rf "$think_dir"' EXIT
+          printf '%s' system > "$think_dir/system.txt"
+          printf '%s' prompt > "$think_dir/content.txt"
+          printf '%s\n' '[]' > "$think_dir/images.json"
+
+          bash -c 'source "$1"; source "$2"; build_chat_payload test "$3/system.txt" "$3/content.txt" "$3/images.json" "$3/default.json"' _ "$core" "$ollama" "$think_dir"
+          jq -e 'has("think") | not' "$think_dir/default.json" >/dev/null
+
+          LLM_THINK=false bash -c 'source "$1"; source "$2"; build_chat_payload test "$3/system.txt" "$3/content.txt" "$3/images.json" "$3/off.json"' _ "$core" "$ollama" "$think_dir"
+          jq -e '.think == false' "$think_dir/off.json" >/dev/null
+
+          LLM_THINK=true bash -c 'source "$1"; source "$2"; build_chat_payload test "$3/system.txt" "$3/content.txt" "$3/images.json" "$3/on.json"' _ "$core" "$ollama" "$think_dir"
+          jq -e '.think == true' "$think_dir/on.json" >/dev/null
+
+          if LLM_THINK=maybe bash -c 'source "$1"; source "$2"; build_chat_payload test "$3/system.txt" "$3/content.txt" "$3/images.json" "$3/bad.json"' _ "$core" "$ollama" "$think_dir" >/dev/null 2>&1; then
+            echo 'Invalid common thinking mode unexpectedly succeeded.' >&2
+            exit 1
+          fi
 
           bad_schema="$(mktemp)"
           printf '{bad\n' > "$bad_schema"
@@ -141,6 +161,7 @@ jobs:
           compose_json="$(docker compose -f compose.yml config --format json)"
           jq -e '.services["llm-ollama"].environment.LLM_OLLAMA_ATTACHMENT_MAX_BYTES == "16777216"' <<< "$compose_json" >/dev/null
           jq -e '.services["llm-ollama"].environment.LLM_OLLAMA_PDF_MAX_PAGES == "24"' <<< "$compose_json" >/dev/null
+          jq -e '.services["llm-ollama"].environment.LLM_THINK == ""' <<< "$compose_json" >/dev/null
           LLM_OLLAMA_VOLUME=llm-ollama-isolated docker compose -f compose.yml config \
             | grep -q 'name: llm-ollama-isolated'
 

@@ -97,6 +97,15 @@ encode_images_json() {
   rm -f -- "$encoded_file"
 }
 
+normalize_think_mode() {
+  case "${1:-}" in
+    "") printf '%s' "" ;;
+    1|true|TRUE|yes|YES|on|ON) printf '%s' true ;;
+    0|false|FALSE|no|NO|off|OFF) printf '%s' false ;;
+    *) die "LLM_THINK must be true/false when set" ;;
+  esac
+}
+
 build_chat_payload() {
   require_command jq
 
@@ -105,12 +114,16 @@ build_chat_payload() {
   local content_file="$3"
   local images_file="$4"
   local output_file="$5"
+  local think
+
+  think="$(normalize_think_mode "${LLM_THINK:-}")" || return $?
 
   jq -n \
     --arg model "$model" \
     --rawfile system "$system_file" \
     --rawfile content "$content_file" \
     --slurpfile images "$images_file" \
+    --arg think "$think" \
     '{
       model: $model,
       messages:
@@ -124,6 +137,9 @@ build_chat_payload() {
     | if (($images[0] // []) | length) > 0
       then .messages[-1].images = $images[0]
       else .
+      end
+    | if $think == "" then .
+      else . + {think: ($think == "true")}
       end' > "$output_file"
 }
 
@@ -193,7 +209,7 @@ build_generate_payload() {
     --arg model "$model" \
     --arg prompt "$prompt" \
     --argjson format "$format_json" \
-    '{model: $model, prompt: $prompt, stream: false, format: $format}'
+    '{model: $model, prompt: $prompt, stream: false, format: $format, think: false}'
 }
 
 post_generate_json() {
@@ -220,7 +236,7 @@ post_generate_json() {
     --arg model "$model" \
     --rawfile prompt "$prompt_file" \
     --slurpfile format "$format_file" \
-    '{model:$model, prompt:$prompt, stream:false, format:$format[0]}' > "$payload_file"
+    '{model:$model, prompt:$prompt, stream:false, format:$format[0], think:false}' > "$payload_file"
 
   if ! curl --connect-timeout 3 --fail-with-body -sS \
       -H 'Content-Type: application/json' \

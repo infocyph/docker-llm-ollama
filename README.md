@@ -325,6 +325,23 @@ docker compose exec llm-ollama \
 
 Multiple `--attach`, `--image`, `--pdf` and `--pdf-vision` options can be supplied in one request.
 
+### Thinking control
+
+API-backed developer commands share the provider-neutral `LLM_THINK` switch with the
+FastFlow image:
+
+```bash
+LLM_THINK=true  docker compose exec -e LLM_THINK=true  llm-ollama llm-ollama ask "Think through this"
+LLM_THINK=false docker compose exec -e LLM_THINK=false llm-ollama llm-ollama ask "Answer directly"
+```
+
+Leave it empty to use the model/provider default. Strict structured output is intentionally
+different: `llm-ollama json` always sends `think:false`, even when the global override
+is on, so reasoning cannot displace the required JSON payload.
+
+Native `llm-ollama chat` / `run` delegate to Ollama's own CLI; use Ollama's native
+thinking controls for those interactive sessions.
+
 ### Structured JSON
 
 ```bash
@@ -364,6 +381,7 @@ Standalone Compose reads normal Compose interpolation values from the shell and 
 | `LLM_OLLAMA_WORKSPACE_MODE` | `ro` | Workspace bind mode; use `rw` only deliberately |
 | `LLM_OLLAMA_MODEL` | empty | CLI default-model override; empty falls back to the image's baked model |
 | `LLM_OLLAMA_SYSTEM` | empty | Default system instruction for `llm-ollama prompt` |
+| `LLM_THINK` | empty | Common API-backed thinking override: `true`, `false`, or empty for model default |
 | `LLM_OLLAMA_INPUT_WARN_BYTES` | `1048576` | Warning threshold for text/diff input |
 | `LLM_OLLAMA_INPUT_MAX_BYTES` | `0` | Hard text/diff ceiling; `0` disables it |
 | `LLM_OLLAMA_ATTACHMENT_MAX_BYTES` | `16777216` | Per attachment/source-file limit |
