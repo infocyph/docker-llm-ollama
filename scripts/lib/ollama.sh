@@ -102,7 +102,7 @@ normalize_think_mode() {
     "") printf '%s' "" ;;
     1|true|TRUE|yes|YES|on|ON) printf '%s' true ;;
     0|false|FALSE|no|NO|off|OFF) printf '%s' false ;;
-    *) die "LLM_OLLAMA_THINK must be true/false when set" ;;
+    *) die "LLM_THINK must be true/false when set" ;;
   esac
 }
 
@@ -116,7 +116,7 @@ build_chat_payload() {
   local output_file="$5"
   local think
 
-  think="$(normalize_think_mode "${LLM_OLLAMA_THINK:-}")"
+  think="$(normalize_think_mode "${LLM_THINK:-}")"
 
   jq -n \
     --arg model "$model" \
