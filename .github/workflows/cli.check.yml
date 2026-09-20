@@ -161,6 +161,7 @@ jobs:
           compose_json="$(docker compose -f compose.yml config --format json)"
           jq -e '.services["llm-ollama"].environment.LLM_OLLAMA_ATTACHMENT_MAX_BYTES == "16777216"' <<< "$compose_json" >/dev/null
           jq -e '.services["llm-ollama"].environment.LLM_OLLAMA_PDF_MAX_PAGES == "24"' <<< "$compose_json" >/dev/null
+          jq -e '.services["llm-ollama"].environment.LLM_THINK == ""' <<< "$compose_json" >/dev/null
           LLM_OLLAMA_VOLUME=llm-ollama-isolated docker compose -f compose.yml config \
             | grep -q 'name: llm-ollama-isolated'
 
