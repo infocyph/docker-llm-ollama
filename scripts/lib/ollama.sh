@@ -116,7 +116,7 @@ build_chat_payload() {
   local output_file="$5"
   local think
 
-  think="$(normalize_think_mode "${LLM_THINK:-}")"
+  think="$(normalize_think_mode "${LLM_THINK:-}")" || return $?
 
   jq -n \
     --arg model "$model" \
