@@ -302,20 +302,39 @@ jobs:
           set -euo pipefail
           if [[ "$PUBLISH_RELEASE_TAG" == 'true' ]]; then verify_tag="$RELEASE_REF"; else verify_tag="$LATEST_REF"; fi
 
-          verify_digest() {
-            local ref="$1" found
-            found="$(docker buildx imagetools inspect "$ref" | awk '/^Digest:/ {print $2; exit}')"
-            [[ "$found" == "$DIGEST" ]] || { echo "Digest mismatch for $ref: ${found:-<empty>}" >&2; return 1; }
+          verify_manifest() {
+            local ref="$1" manifest_json='' found='' attempt
+
+            for attempt in $(seq 1 12); do
+              if manifest_json="$(docker buildx imagetools inspect "$ref" --format '{{json .Manifest}}' 2>/dev/null)"; then
+                found="$(jq -r '.digest // empty' <<<"$manifest_json")"
+                if [[ "$found" == "$DIGEST" ]]; then
+                  jq -e '
+                    (.manifests // [])
+                    | any(.[]?;
+                        .platform.os == "linux"
+                        and .platform.architecture == "amd64")
+                  ' <<<"$manifest_json" >/dev/null || {
+                    echo "Published index does not contain linux/amd64: $ref" >&2
+                    return 1
+                  }
+                  return 0
+                fi
+              fi
+
+              if (( attempt < 12 )); then
+                echo "Waiting for registry propagation: $ref (attempt $attempt/12, digest=${found:-unavailable})" >&2
+                sleep 5
+              fi
+            done
+
+            echo "Unable to verify published digest for $ref: expected $DIGEST, got ${found:-unavailable}" >&2
+            [[ -z "$manifest_json" ]] || printf '%s\n' "$manifest_json" >&2
+            return 1
           }
 
-          verify_digest "docker.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${verify_tag}"
-          verify_digest "ghcr.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${verify_tag}"
-
-          for registry in docker.io ghcr.io; do
-            ref="${registry}/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}@${DIGEST}"
-            docker pull --platform linux/amd64 "$ref" >/dev/null
-            test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$ref")" = 'linux/amd64'
-          done
+          verify_manifest "docker.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${verify_tag}"
+          verify_manifest "ghcr.io/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}:${verify_tag}"
 
       - name: Verify published standard runtime by digest
         if: matrix.runtime_smoke
