@@ -171,7 +171,7 @@ jobs:
         if: matrix.runtime_smoke
         env:
           OLLAMA_MODEL: qwen3.5:9b
-        run: .automation/scripts/ci/runtime-smoke.sh "$CANDIDATE_IMAGE"
+        run: bash .automation/scripts/ci/runtime-smoke.sh "$CANDIDATE_IMAGE"
 
       - name: Record candidate metadata
         env:

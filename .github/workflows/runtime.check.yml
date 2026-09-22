@@ -69,4 +69,4 @@ jobs:
       - name: Run runtime smoke
         env:
           OLLAMA_MODEL: ${{ inputs.model || 'qwen3.5:9b' }}
-        run: scripts/ci/runtime-smoke.sh llm-ollama:runtime-smoke
+        run: bash scripts/ci/runtime-smoke.sh llm-ollama:runtime-smoke
