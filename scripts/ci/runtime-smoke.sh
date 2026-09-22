@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 IMAGE="${1:-${LLM_OLLAMA_SMOKE_IMAGE:-llm-ollama:runtime-smoke}}"
-MODEL="${OLLAMA_MODEL:-qwen3:14b}"
+MODEL="${OLLAMA_MODEL:-qwen3.5:9b}"
 suffix="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-$$"
 container="llm-ollama-smoke-${suffix}"
 volume="llm-ollama-smoke-${suffix}"

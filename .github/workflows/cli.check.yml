@@ -52,7 +52,7 @@ jobs:
           test "$(LLM_OLLAMA_MODEL=env-model OLLAMA_MODEL=runtime-model bash -c 'source "$1"; resolve_model explicit-model' _ "$core")" = explicit-model
           test "$(LLM_OLLAMA_MODEL=env-model OLLAMA_MODEL=runtime-model bash -c 'source "$1"; resolve_model' _ "$core")" = env-model
           test "$(env -u LLM_OLLAMA_MODEL OLLAMA_MODEL=runtime-model bash -c 'source "$1"; resolve_model' _ "$core")" = runtime-model
-          test "$(env -u LLM_OLLAMA_MODEL -u OLLAMA_MODEL bash -c 'source "$1"; resolve_model' _ "$core")" = qwen3:14b
+          test "$(env -u LLM_OLLAMA_MODEL -u OLLAMA_MODEL bash -c 'source "$1"; resolve_model' _ "$core")" = qwen3.5:9b
 
           bash -c 'source "$1"; source "$2"; build_generate_payload "test-model" "hello\nworld" "{\"type\":\"object\"}"' _ "$core" "$ollama" \
             | jq -e '.model == "test-model" and .stream == false and .format.type == "object" and .think == false' >/dev/null
