@@ -20,6 +20,7 @@ jobs:
 
       - name: Validate CLI
         run: |
+          test -x scripts/ci/runtime-smoke.sh
           bash -n scripts/llm-ollama scripts/lib/*.sh scripts/commands/*.sh scripts/ci/*.sh
           shellcheck -x scripts/llm-ollama scripts/lib/*.sh scripts/commands/*.sh scripts/ci/*.sh
 
